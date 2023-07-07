@@ -7,6 +7,10 @@ inputs:
   OPENAI_API_KEY:
     description: "OpenAI API key for GPT."
     required: true
+  OPENAI_API_MODEL:
+    description: "OpenAI API model."
+    required: false
+    default: "gpt-4"
   REVIEW_MAX_COMMENTS:
     description: "Maximum number of comments to include in a review."
     required: false
