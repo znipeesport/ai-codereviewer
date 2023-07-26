@@ -7,6 +7,8 @@ import minimatch from "minimatch";
 
 const GITHUB_TOKEN: string = core.getInput("GITHUB_TOKEN");
 const OPENAI_API_KEY: string = core.getInput("OPENAI_API_KEY");
+const REVIEW_MAX_COMMENTS: string = core.getInput("REVIEW_MAX_COMMENTS");
+const REVIEW_PROJECT_CONTEXT: string = core.getInput("REVIEW_PROJECT_CONTEXT");
 
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
@@ -96,12 +98,14 @@ async function getBaseAndHeadShas(
 }
 
 function createPrompt(file: File, chunk: Chunk, prDetails: PRDetails): string {
-  return `Your task is to review pull requests. Instructions:
+  return `Your task is to review pull requests (PR). Instructions:
 - Provide the response in following JSON format:  [{"lineNumber":  <line_number>, "reviewComment": "<review comment>"}]
 - Do not give positive comments or compliments.
 - Provide comments and suggestions ONLY if there is something to improve, otherwise return an empty array.
+- Provide at most ${REVIEW_MAX_COMMENTS} comments. It's up to you how to decide which comments to include.
 - Write the comment in GitHub Markdown format.
 - Use the given description only for the overall context and only comment the code.
+${REVIEW_PROJECT_CONTEXT ? `- Additional context regarding this PR's project: ${REVIEW_PROJECT_CONTEXT}` : ""}
 - IMPORTANT: NEVER suggest adding comments to the code.
 
 Review the following code diff in the file "${
