@@ -50,6 +50,8 @@ const parse_diff_1 = __importDefault(__nccwpck_require__(4833));
 const minimatch_1 = __importDefault(__nccwpck_require__(2002));
 const GITHUB_TOKEN = core.getInput("GITHUB_TOKEN");
 const OPENAI_API_KEY = core.getInput("OPENAI_API_KEY");
+const REVIEW_MAX_COMMENTS = core.getInput("REVIEW_MAX_COMMENTS");
+const REVIEW_PROJECT_CONTEXT = core.getInput("REVIEW_PROJECT_CONTEXT");
 const octokit = new rest_1.Octokit({ auth: GITHUB_TOKEN });
 const configuration = new openai_1.Configuration({
     apiKey: OPENAI_API_KEY,
@@ -119,12 +121,14 @@ function getBaseAndHeadShas(owner, repo, pull_number) {
     });
 }
 function createPrompt(file, chunk, prDetails) {
-    return `Your task is to review pull requests. Instructions:
+    return `Your task is to review pull requests (PR). Instructions:
 - Provide the response in following JSON format:  [{"lineNumber":  <line_number>, "reviewComment": "<review comment>"}]
 - Do not give positive comments or compliments.
 - Provide comments and suggestions ONLY if there is something to improve, otherwise return an empty array.
+- Provide at most ${REVIEW_MAX_COMMENTS} comments. It's up to you how to decide which comments to include.
 - Write the comment in GitHub Markdown format.
 - Use the given description only for the overall context and only comment the code.
+${REVIEW_PROJECT_CONTEXT ? `- Additional context regarding this PR's project: ${REVIEW_PROJECT_CONTEXT}` : ""}
 - IMPORTANT: NEVER suggest adding comments to the code.
 
 Review the following code diff in the file "${file.to}" and take the pull request title and description into account when writing the response.
