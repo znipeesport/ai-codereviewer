@@ -12,9 +12,9 @@ inputs:
     required: false
     default: "gpt-4"
   REVIEW_MAX_COMMENTS:
-    description: "Maximum number of comments to include in a review."
+    description: "Maximum number of comments to include in a review (per diff)."
     required: false
-    default: 10
+    default: 3
   REVIEW_PROJECT_CONTEXT:
     description: "Project context to include in a review. E.g. Typescript with NestJS + TypeORM"
     required: false
