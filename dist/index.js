@@ -53,6 +53,7 @@ const OPENAI_API_KEY = core.getInput("OPENAI_API_KEY");
 const OPENAI_API_MODEL = core.getInput("OPENAI_API_MODEL");
 const REVIEW_MAX_COMMENTS = core.getInput("REVIEW_MAX_COMMENTS");
 const REVIEW_PROJECT_CONTEXT = core.getInput("REVIEW_PROJECT_CONTEXT");
+const MAX_TOKENS = 32768;
 const octokit = new rest_1.Octokit({ auth: GITHUB_TOKEN });
 const configuration = new openai_1.Configuration({
     apiKey: OPENAI_API_KEY,
@@ -88,55 +89,35 @@ function getDiff(owner, repo, pull_number) {
         return response.data;
     });
 }
-function analyzeCode(parsedDiff, prDetails) {
+function analyzeCode(changedFiles, prDetails) {
     return __awaiter(this, void 0, void 0, function* () {
+        const prompt = createPrompt(changedFiles, prDetails);
+        const aiResponse = yield getAIResponse(prompt);
         const comments = [];
-        for (const file of parsedDiff) {
-            if (file.to === "/dev/null")
-                continue; // Ignore deleted files
-            for (const chunk of file.chunks) {
-                const prompt = createPrompt(file, chunk, prDetails);
-                const aiResponse = yield getAIResponse(prompt);
-                if (aiResponse) {
-                    const newComments = createComment(file, chunk, aiResponse);
-                    if (newComments) {
-                        comments.push(...newComments);
-                    }
-                }
+        if (aiResponse) {
+            const newComments = createComments(changedFiles, aiResponse);
+            if (newComments) {
+                comments.push(...newComments);
             }
         }
         return comments;
     });
 }
-function getBaseAndHeadShas(owner, repo, pull_number) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const prResponse = yield octokit.pulls.get({
-            owner,
-            repo,
-            pull_number,
-        });
-        return {
-            baseSha: prResponse.data.base.sha,
-            headSha: prResponse.data.head.sha,
-        };
-    });
-}
-function createPrompt(file, chunk, prDetails) {
-    return `Your task is to review pull requests (PR). Instructions:
-- Provide the response in following JSON format:  [{"lineNumber":  <line_number>, "reviewComment": "<review comment>"}]
+function createPrompt(changedFiles, prDetails) {
+    const problemOutline = `Your task is to review pull requests (PR). Instructions:
+- Provide the response in following JSON format:  [{"file": <file name>,  "lineNumber":  <line_number>, "reviewComment": "<review comment>"}]
 - DO NOT give positive comments or compliments.
 - DO NOT give advice on renaming variable names or writing more descriptive variables.
 - Provide comments and suggestions ONLY if there is something to improve, otherwise return an empty array.
 - Provide at most ${REVIEW_MAX_COMMENTS} comments. It's up to you how to decide which comments to include.
 - Write the comment in GitHub Markdown format.
 - Use the given description only for the overall context and only comment the code.
-${REVIEW_PROJECT_CONTEXT ? `- Additional context regarding this PR's project: ${REVIEW_PROJECT_CONTEXT}` : ""}
+${REVIEW_PROJECT_CONTEXT
+        ? `- Additional context regarding this PR's project: ${REVIEW_PROJECT_CONTEXT}`
+        : ""}
 - IMPORTANT: NEVER suggest adding comments to the code.
-- IMPORTANT: Evaluate the entire diff in the file before adding any comments.
-- IMPORTANT: Consider that you might have been given only a chunk of a file, so DO NOT assume by default that attributes or methods don't exist.
+- IMPORTANT: Evaluate the entire diff in the PR before adding any comments.
 
-Review the following code diff in the file "${file.to}" and take the pull request title and description into account when writing the response.
-  
 Pull request title: ${prDetails.title}
 Pull request description:
 
@@ -144,16 +125,30 @@ Pull request description:
 ${prDetails.description}
 ---
 
-Git diff to review:
+TAKE A DEEP BREATH AND WORK ON THIS THIS PROBLEM STEP-BY-STEP.
+`;
+    const diffChunksPrompt = new Array();
+    for (const file of changedFiles) {
+        if (file.to === "/dev/null")
+            continue; // Ignore deleted files
+        for (const chunk of file.chunks) {
+            diffChunksPrompt.push(createPromptForDiffChunk(file, chunk));
+        }
+    }
+    return `${problemOutline}\n ${diffChunksPrompt.join("\n")}`;
+}
+function createPromptForDiffChunk(file, chunk) {
+    return `\n
+  Review the following code diff in the file "${file.to}". Git diff to review:
 
-\`\`\`diff
-${chunk.content}
-${chunk.changes
+  \`\`\`diff
+  ${chunk.content}
+  ${chunk.changes
         // @ts-expect-error - ln and ln2 exists where needed
         .map((c) => `${c.ln ? c.ln : c.ln2} ${c.content}`)
         .join("\n")}
-\`\`\`
-`;
+  \`\`\`
+  `;
 }
 function getAIResponse(prompt) {
     var _a, _b;
@@ -161,7 +156,7 @@ function getAIResponse(prompt) {
         const queryConfig = {
             model: OPENAI_API_MODEL,
             temperature: 0.2,
-            max_tokens: 700,
+            max_tokens: MAX_TOKENS,
             top_p: 1,
             frequency_penalty: 0,
             presence_penalty: 0,
@@ -182,17 +177,18 @@ function getAIResponse(prompt) {
         }
     });
 }
-function createComment(file, chunk, aiResponses) {
-    return aiResponses.flatMap((aiResponse) => {
-        if (!file.to) {
-            return [];
-        }
+function createComments(changedFiles, aiResponses) {
+    return aiResponses
+        .flatMap((aiResponse) => {
+        var _a;
+        const file = changedFiles.find((file) => file.to === aiResponse.file);
         return {
             body: aiResponse.reviewComment,
-            path: file.to,
+            path: (_a = file === null || file === void 0 ? void 0 : file.to) !== null && _a !== void 0 ? _a : "",
             line: Number(aiResponse.lineNumber),
         };
-    });
+    })
+        .filter((comments) => comments.path !== "");
 }
 function createReviewComment(owner, repo, pull_number, comments) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -236,12 +232,12 @@ function main() {
             console.log("No diff found");
             return;
         }
-        const parsedDiff = (0, parse_diff_1.default)(diff);
+        const changedFiles = (0, parse_diff_1.default)(diff);
         const excludePatterns = core
             .getInput("exclude")
             .split(",")
             .map((s) => s.trim());
-        const filteredDiff = parsedDiff.filter((file) => {
+        const filteredDiff = changedFiles.filter((file) => {
             return !excludePatterns.some((pattern) => { var _a; return (0, minimatch_1.default)((_a = file.to) !== null && _a !== void 0 ? _a : "", pattern); });
         });
         const comments = yield analyzeCode(filteredDiff, prDetails);
