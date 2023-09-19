@@ -36,7 +36,7 @@ interface AICommentResponse {
 interface GithubComment {
   body: string;
   path: string;
-  line: number
+  line: number;
 }
 
 async function getPRDetails(): Promise<PRDetails> {
@@ -101,7 +101,11 @@ function createPrompt(changedFiles: File[], prDetails: PRDetails): string {
 - Provide at most ${REVIEW_MAX_COMMENTS} comments. It's up to you how to decide which comments to include.
 - Write the comment in GitHub Markdown format.
 - Use the given description only for the overall context and only comment the code.
-${REVIEW_PROJECT_CONTEXT ? `- Additional context regarding this PR's project: ${REVIEW_PROJECT_CONTEXT}` : ""}
+${
+  REVIEW_PROJECT_CONTEXT
+    ? `- Additional context regarding this PR's project: ${REVIEW_PROJECT_CONTEXT}`
+    : ""
+}
 - IMPORTANT: NEVER suggest adding comments to the code.
 - IMPORTANT: Evaluate the entire diff in the PR before adding any comments.
 
@@ -124,7 +128,7 @@ TAKE A DEEP BREATH AND WORK ON THIS THIS PROBLEM STEP-BY-STEP.
     }
   }
 
-  return `${problemOutline}\n ${diffChunksPrompt.join('\n')}`;
+  return `${problemOutline}\n ${diffChunksPrompt.join("\n")}`;
 }
 
 function createPromptForDiffChunk(file: File, chunk: Chunk): string {
@@ -141,7 +145,9 @@ function createPromptForDiffChunk(file: File, chunk: Chunk): string {
   `;
 }
 
-async function getAIResponse(prompt: string): Promise<Array<AICommentResponse> | null> {
+async function getAIResponse(
+  prompt: string
+): Promise<Array<AICommentResponse> | null> {
   const queryConfig = {
     model: OPENAI_API_MODEL,
     temperature: 0.2,
@@ -170,18 +176,21 @@ async function getAIResponse(prompt: string): Promise<Array<AICommentResponse> |
   }
 }
 
-function createComments(changedFiles: File[], aiResponses: Array<AICommentResponse>): Array<GithubComment> {
+function createComments(
+  changedFiles: File[],
+  aiResponses: Array<AICommentResponse>
+): Array<GithubComment> {
   return aiResponses
     .flatMap((aiResponse) => {
       const file = changedFiles.find((file) => file.to === aiResponse.file);
-    
+
       return {
         body: aiResponse.reviewComment,
-        path: file?.to ?? '',
+        path: file?.to ?? "",
         line: Number(aiResponse.lineNumber),
       };
     })
-    .filter((comments) => comments.path !== '');
+    .filter((comments) => comments.path !== "");
 }
 
 async function createReviewComment(
