@@ -33,6 +33,12 @@ interface AICommentResponse {
   reviewComment: string;
 }
 
+interface GithubComment {
+  body: string;
+  path: string;
+  line: number
+}
+
 async function getPRDetails(): Promise<PRDetails> {
   const { repository, number } = JSON.parse(
     readFileSync(process.env.GITHUB_EVENT_PATH || "", "utf8")
@@ -69,11 +75,11 @@ async function getDiff(
 async function analyzeCode(
   changedFiles: File[],
   prDetails: PRDetails
-): Promise<Array<{ body: string; path: string; line: number }>> {
+): Promise<Array<GithubComment>> {
   const prompt = createPrompt(changedFiles, prDetails);
   const aiResponse = await getAIResponse(prompt);
 
-  const comments: Array<{ body: string; path: string; line: number }> = [];
+  const comments: Array<GithubComment> = [];
 
   if (aiResponse) {
     const newComments = createComments(changedFiles, aiResponse);
@@ -164,7 +170,7 @@ async function getAIResponse(prompt: string): Promise<Array<AICommentResponse> |
   }
 }
 
-function createComments(changedFiles: File[], aiResponses: Array<AICommentResponse>): Array<{ body: string; path: string; line: number }> {
+function createComments(changedFiles: File[], aiResponses: Array<AICommentResponse>): Array<GithubComment> {
   return aiResponses
     .flatMap((aiResponse) => {
       const file = changedFiles.find((file) => file.to === aiResponse.file);
@@ -182,7 +188,7 @@ async function createReviewComment(
   owner: string,
   repo: string,
   pull_number: number,
-  comments: Array<{ body: string; path: string; line: number }>
+  comments: Array<GithubComment>
 ): Promise<void> {
   await octokit.pulls.createReview({
     owner,
