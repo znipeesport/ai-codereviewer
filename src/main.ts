@@ -11,6 +11,8 @@ const OPENAI_API_MODEL: string = core.getInput("OPENAI_API_MODEL");
 const REVIEW_MAX_COMMENTS: string = core.getInput("REVIEW_MAX_COMMENTS");
 const REVIEW_PROJECT_CONTEXT: string = core.getInput("REVIEW_PROJECT_CONTEXT");
 
+const MAX_TOKENS = 32768;
+
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
 const configuration = new Configuration({
@@ -25,6 +27,18 @@ interface PRDetails {
   pull_number: number;
   title: string;
   description: string;
+}
+
+interface AICommentResponse {
+  file: string;
+  lineNumber: string;
+  reviewComment: string;
+}
+
+interface GithubComment {
+  body: string;
+  path: string;
+  line: number;
 }
 
 async function getPRDetails(): Promise<PRDetails> {
@@ -61,61 +75,42 @@ async function getDiff(
 }
 
 async function analyzeCode(
-  parsedDiff: File[],
+  changedFiles: File[],
   prDetails: PRDetails
-): Promise<Array<{ body: string; path: string; line: number }>> {
-  const comments: Array<{ body: string; path: string; line: number }> = [];
+): Promise<Array<GithubComment>> {
+  const prompt = createPrompt(changedFiles, prDetails);
+  const aiResponse = await getAIResponse(prompt);
 
-  for (const file of parsedDiff) {
-    if (file.to === "/dev/null") continue; // Ignore deleted files
-    for (const chunk of file.chunks) {
-      const prompt = createPrompt(file, chunk, prDetails);
-      const aiResponse = await getAIResponse(prompt);
-      if (aiResponse) {
-        const newComments = createComment(file, chunk, aiResponse);
-        if (newComments) {
-          comments.push(...newComments);
-        }
-      }
+  const comments: Array<GithubComment> = [];
+
+  if (aiResponse) {
+    const newComments = createComments(changedFiles, aiResponse);
+
+    if (newComments) {
+      comments.push(...newComments);
     }
   }
+
   return comments;
 }
 
-async function getBaseAndHeadShas(
-  owner: string,
-  repo: string,
-  pull_number: number
-): Promise<{ baseSha: string; headSha: string }> {
-  const prResponse = await octokit.pulls.get({
-    owner,
-    repo,
-    pull_number,
-  });
-  return {
-    baseSha: prResponse.data.base.sha,
-    headSha: prResponse.data.head.sha,
-  };
-}
-
-function createPrompt(file: File, chunk: Chunk, prDetails: PRDetails): string {
-  return `Your task is to review pull requests (PR). Instructions:
-- Provide the response in following JSON format:  [{"lineNumber":  <line_number>, "reviewComment": "<review comment>"}]
+function createPrompt(changedFiles: File[], prDetails: PRDetails): string {
+  const problemOutline = `Your task is to review pull requests (PR). Instructions:
+- Provide the response in following JSON format:  [{"file": <file name>,  "lineNumber":  <line_number>, "reviewComment": "<review comment>"}]
 - DO NOT give positive comments or compliments.
 - DO NOT give advice on renaming variable names or writing more descriptive variables.
 - Provide comments and suggestions ONLY if there is something to improve, otherwise return an empty array.
 - Provide at most ${REVIEW_MAX_COMMENTS} comments. It's up to you how to decide which comments to include.
 - Write the comment in GitHub Markdown format.
 - Use the given description only for the overall context and only comment the code.
-${REVIEW_PROJECT_CONTEXT ? `- Additional context regarding this PR's project: ${REVIEW_PROJECT_CONTEXT}` : ""}
+${
+  REVIEW_PROJECT_CONTEXT
+    ? `- Additional context regarding this PR's project: ${REVIEW_PROJECT_CONTEXT}`
+    : ""
+}
 - IMPORTANT: NEVER suggest adding comments to the code.
-- IMPORTANT: Evaluate the entire diff in the file before adding any comments.
-- IMPORTANT: Consider that you might have been given only a chunk of a file, so DO NOT assume by default that attributes or methods don't exist.
+- IMPORTANT: Evaluate the entire diff in the PR before adding any comments.
 
-Review the following code diff in the file "${
-    file.to
-  }" and take the pull request title and description into account when writing the response.
-  
 Pull request title: ${prDetails.title}
 Pull request description:
 
@@ -123,26 +118,42 @@ Pull request description:
 ${prDetails.description}
 ---
 
-Git diff to review:
-
-\`\`\`diff
-${chunk.content}
-${chunk.changes
-  // @ts-expect-error - ln and ln2 exists where needed
-  .map((c) => `${c.ln ? c.ln : c.ln2} ${c.content}`)
-  .join("\n")}
-\`\`\`
+TAKE A DEEP BREATH AND WORK ON THIS THIS PROBLEM STEP-BY-STEP.
 `;
+
+  const diffChunksPrompt = new Array();
+
+  for (const file of changedFiles) {
+    if (file.to === "/dev/null") continue; // Ignore deleted files
+    for (const chunk of file.chunks) {
+      diffChunksPrompt.push(createPromptForDiffChunk(file, chunk));
+    }
+  }
+
+  return `${problemOutline}\n ${diffChunksPrompt.join("\n")}`;
 }
 
-async function getAIResponse(prompt: string): Promise<Array<{
-  lineNumber: string;
-  reviewComment: string;
-}> | null> {
+function createPromptForDiffChunk(file: File, chunk: Chunk): string {
+  return `\n
+  Review the following code diff in the file "${file.to}". Git diff to review:
+
+  \`\`\`diff
+  ${chunk.content}
+  ${chunk.changes
+    // @ts-expect-error - ln and ln2 exists where needed
+    .map((c) => `${c.ln ? c.ln : c.ln2} ${c.content}`)
+    .join("\n")}
+  \`\`\`
+  `;
+}
+
+async function getAIResponse(
+  prompt: string
+): Promise<Array<AICommentResponse> | null> {
   const queryConfig = {
     model: OPENAI_API_MODEL,
     temperature: 0.2,
-    max_tokens: 700,
+    max_tokens: MAX_TOKENS,
     top_p: 1,
     frequency_penalty: 0,
     presence_penalty: 0,
@@ -167,31 +178,28 @@ async function getAIResponse(prompt: string): Promise<Array<{
   }
 }
 
-function createComment(
-  file: File,
-  chunk: Chunk,
-  aiResponses: Array<{
-    lineNumber: string;
-    reviewComment: string;
-  }>
-): Array<{ body: string; path: string; line: number }> {
-  return aiResponses.flatMap((aiResponse) => {
-    if (!file.to) {
-      return [];
-    }
-    return {
-      body: aiResponse.reviewComment,
-      path: file.to,
-      line: Number(aiResponse.lineNumber),
-    };
-  });
+function createComments(
+  changedFiles: File[],
+  aiResponses: Array<AICommentResponse>
+): Array<GithubComment> {
+  return aiResponses
+    .flatMap((aiResponse) => {
+      const file = changedFiles.find((file) => file.to === aiResponse.file);
+
+      return {
+        body: aiResponse.reviewComment,
+        path: file?.to ?? "",
+        line: Number(aiResponse.lineNumber),
+      };
+    })
+    .filter((comments) => comments.path !== "");
 }
 
 async function createReviewComment(
   owner: string,
   repo: string,
   pull_number: number,
-  comments: Array<{ body: string; path: string; line: number }>
+  comments: Array<GithubComment>
 ): Promise<void> {
   await octokit.pulls.createReview({
     owner,
@@ -240,14 +248,14 @@ async function main() {
     return;
   }
 
-  const parsedDiff = parseDiff(diff);
+  const changedFiles = parseDiff(diff);
 
   const excludePatterns = core
     .getInput("exclude")
     .split(",")
     .map((s) => s.trim());
 
-  const filteredDiff = parsedDiff.filter((file) => {
+  const filteredDiff = changedFiles.filter((file) => {
     return !excludePatterns.some((pattern) =>
       minimatch(file.to ?? "", pattern)
     );
