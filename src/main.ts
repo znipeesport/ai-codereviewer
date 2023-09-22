@@ -11,7 +11,7 @@ const OPENAI_API_MODEL: string = core.getInput("OPENAI_API_MODEL");
 const REVIEW_MAX_COMMENTS: string = core.getInput("REVIEW_MAX_COMMENTS");
 const REVIEW_PROJECT_CONTEXT: string = core.getInput("REVIEW_PROJECT_CONTEXT");
 
-const MAX_TOKENS = 32768;
+const RESPONSE_TOKENS = 1024;
 
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
@@ -153,7 +153,7 @@ async function getAIResponse(
   const queryConfig = {
     model: OPENAI_API_MODEL,
     temperature: 0.2,
-    max_tokens: MAX_TOKENS,
+    max_tokens: RESPONSE_TOKENS,
     top_p: 1,
     frequency_penalty: 0,
     presence_penalty: 0,
