@@ -172,8 +172,19 @@ async function getAIResponse(
 
     const res = response.data.choices[0].message?.content?.trim() || "[]";
     return JSON.parse(res);
-  } catch (error) {
-    console.error("Error:", error);
+  } catch (error: any) {
+    console.error("Error Message:", error?.message || error);
+
+    if (error?.response) {
+      console.error("Response Data:", error.response.data);
+      console.error("Response Status:", error.response.status);
+      console.error("Response Headers:", error.response.headers);
+    }
+
+    if (error?.config) {
+      console.error("Config:", error.config);
+    }
+
     return null;
   }
 }

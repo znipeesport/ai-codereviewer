@@ -172,7 +172,15 @@ function getAIResponse(prompt) {
             return JSON.parse(res);
         }
         catch (error) {
-            console.error("Error:", error);
+            console.error("Error Message:", (error === null || error === void 0 ? void 0 : error.message) || error);
+            if (error === null || error === void 0 ? void 0 : error.response) {
+                console.error("Response Data:", error.response.data);
+                console.error("Response Status:", error.response.status);
+                console.error("Response Headers:", error.response.headers);
+            }
+            if (error === null || error === void 0 ? void 0 : error.config) {
+                console.error("Config:", error.config);
+            }
             return null;
         }
     });
