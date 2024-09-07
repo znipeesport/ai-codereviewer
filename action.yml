@@ -19,6 +19,10 @@ inputs:
     description: "Project context to include in a review. E.g. Typescript with NestJS + TypeORM"
     required: false
     default: ""
+  APPROVE_REVIEWS:
+    description: "Whether to approve PR reviews or just comment"
+    required: false
+    default: "false"
   exclude:
     description: "Glob patterns to exclude files from the diff analysis"
     required: false
