@@ -240,6 +240,19 @@ async function createReviewComment(
   console.log("Review comment created successfully.");
 }
 
+async function hasExistingReview(
+  owner: string,
+  repo: string,
+  pull_number: number
+): Promise<boolean> {
+  const reviews = await octokit.pulls.listReviews({
+    owner,
+    repo,
+    pull_number,
+  });
+  return reviews.data.length > 0;
+}
+
 async function main() {
   try {
     console.log("Starting AI code review process...");
@@ -250,13 +263,22 @@ async function main() {
     );
 
     console.log(`Processing ${eventData.action} event...`);
-    if (eventData.action === "opened") {
+    const existingReview = await hasExistingReview(
+      prDetails.owner,
+      prDetails.repo,
+      prDetails.pull_number
+    );
+
+    if (
+      eventData.action === "opened" ||
+      (eventData.action === "synchronize" && !existingReview)
+    ) {
       diff = await getDiff(
         prDetails.owner,
         prDetails.repo,
         prDetails.pull_number
       );
-    } else if (eventData.action === "synchronize") {
+    } else if (eventData.action === "synchronize" && existingReview) {
       const newBaseSha = eventData.before;
       const newHeadSha = eventData.after;
 
