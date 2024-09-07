@@ -184,7 +184,9 @@ async function getAIResponse(
 
     console.log("Received response from OpenAI API.");
     const res = response.data.choices[0].message?.content?.trim() || "[]";
-    return JSON.parse(res);
+    // Remove any markdown formatting before parsing JSON
+    const jsonString = res.replace(/```json\n|\n```/g, "").trim();
+    return JSON.parse(jsonString);
   } catch (error: any) {
     console.error("Error Message:", error?.message || error);
 
@@ -310,6 +312,7 @@ async function main() {
   } catch (error: any) {
     console.error("Error:", error);
     core.setFailed(`Action failed: ${error.message}`);
+    process.exit(1); // This line ensures the GitHub action fails
   }
 }
 
