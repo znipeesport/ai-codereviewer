@@ -10,6 +10,7 @@ const OPENAI_API_KEY: string = core.getInput("OPENAI_API_KEY");
 const OPENAI_API_MODEL: string = core.getInput("OPENAI_API_MODEL");
 const REVIEW_MAX_COMMENTS: string = core.getInput("REVIEW_MAX_COMMENTS");
 const REVIEW_PROJECT_CONTEXT: string = core.getInput("REVIEW_PROJECT_CONTEXT");
+const APPROVE_REVIEWS: boolean = core.getInput("APPROVE_REVIEWS") === "true";
 
 const RESPONSE_TOKENS = 1024;
 
@@ -235,9 +236,11 @@ async function createReviewComment(
     repo,
     pull_number,
     comments,
-    event: "COMMENT",
+    event: APPROVE_REVIEWS ? "APPROVE" : "COMMENT",
   });
-  console.log("Review comment created successfully.");
+  console.log(
+    `Review ${APPROVE_REVIEWS ? "approved" : "commented"} successfully.`
+  );
 }
 
 async function hasExistingReview(
@@ -320,7 +323,7 @@ async function main() {
     console.log(`After filtering, ${filteredDiff.length} files remain.`);
 
     const comments = await analyzeCode(filteredDiff, prDetails);
-    if (comments.length > 0) {
+    if (APPROVE_REVIEWS || comments.length > 0) {
       await createReviewComment(
         prDetails.owner,
         prDetails.repo,
