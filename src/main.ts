@@ -166,6 +166,9 @@ async function getAIResponse(
     top_p: 1,
     frequency_penalty: 0,
     presence_penalty: 0,
+    response_format: {
+      type: "json_object",
+    },
   };
 
   try {
