@@ -149,7 +149,7 @@ function createPromptForDiffChunk(file: File, chunk: Chunk): string {
 
 async function getAIResponse(
   prompt: string
-): Promise<Array<AICommentResponse> | null> {
+): Promise<Array<AICommentResponse>> {
   const queryConfig = {
     model: OPENAI_API_MODEL,
     temperature: 0.2,
@@ -170,6 +170,10 @@ async function getAIResponse(
       ],
     });
 
+    if (response.status !== 200) {
+      throw new Error(`OpenAI API returned non-200 status: ${response.status}`);
+    }
+
     const res = response.data.choices[0].message?.content?.trim() || "[]";
     return JSON.parse(res);
   } catch (error: any) {
@@ -185,7 +189,8 @@ async function getAIResponse(
       console.error("Config:", error.config);
     }
 
-    return null;
+    core.setFailed(`OpenAI API request failed: ${error.message}`);
+    throw error;
   }
 }
 
@@ -222,68 +227,70 @@ async function createReviewComment(
 }
 
 async function main() {
-  const prDetails = await getPRDetails();
-  let diff: string | null;
-  const eventData = JSON.parse(
-    readFileSync(process.env.GITHUB_EVENT_PATH ?? "", "utf8")
-  );
-
-  if (eventData.action === "opened") {
-    diff = await getDiff(
-      prDetails.owner,
-      prDetails.repo,
-      prDetails.pull_number
+  try {
+    const prDetails = await getPRDetails();
+    let diff: string | null;
+    const eventData = JSON.parse(
+      readFileSync(process.env.GITHUB_EVENT_PATH ?? "", "utf8")
     );
-  } else if (eventData.action === "synchronize") {
-    const newBaseSha = eventData.before;
-    const newHeadSha = eventData.after;
 
-    const response = await octokit.repos.compareCommits({
-      headers: {
-        accept: "application/vnd.github.v3.diff",
-      },
-      owner: prDetails.owner,
-      repo: prDetails.repo,
-      base: newBaseSha,
-      head: newHeadSha,
+    if (eventData.action === "opened") {
+      diff = await getDiff(
+        prDetails.owner,
+        prDetails.repo,
+        prDetails.pull_number
+      );
+    } else if (eventData.action === "synchronize") {
+      const newBaseSha = eventData.before;
+      const newHeadSha = eventData.after;
+
+      const response = await octokit.repos.compareCommits({
+        headers: {
+          accept: "application/vnd.github.v3.diff",
+        },
+        owner: prDetails.owner,
+        repo: prDetails.repo,
+        base: newBaseSha,
+        head: newHeadSha,
+      });
+
+      diff = String(response.data);
+    } else {
+      console.log("Unsupported event:", process.env.GITHUB_EVENT_NAME);
+      return;
+    }
+
+    if (!diff) {
+      console.log("No diff found");
+      return;
+    }
+
+    const changedFiles = parseDiff(diff);
+
+    const excludePatterns = core
+      .getInput("exclude")
+      .split(",")
+      .map((s) => s.trim());
+
+    const filteredDiff = changedFiles.filter((file) => {
+      return !excludePatterns.some((pattern) =>
+        minimatch(file.to ?? "", pattern)
+      );
     });
 
-    diff = String(response.data);
-  } else {
-    console.log("Unsupported event:", process.env.GITHUB_EVENT_NAME);
-    return;
-  }
-
-  if (!diff) {
-    console.log("No diff found");
-    return;
-  }
-
-  const changedFiles = parseDiff(diff);
-
-  const excludePatterns = core
-    .getInput("exclude")
-    .split(",")
-    .map((s) => s.trim());
-
-  const filteredDiff = changedFiles.filter((file) => {
-    return !excludePatterns.some((pattern) =>
-      minimatch(file.to ?? "", pattern)
-    );
-  });
-
-  const comments = await analyzeCode(filteredDiff, prDetails);
-  if (comments.length > 0) {
-    await createReviewComment(
-      prDetails.owner,
-      prDetails.repo,
-      prDetails.pull_number,
-      comments
-    );
+    const comments = await analyzeCode(filteredDiff, prDetails);
+    if (comments.length > 0) {
+      await createReviewComment(
+        prDetails.owner,
+        prDetails.repo,
+        prDetails.pull_number,
+        comments
+      );
+    }
+  } catch (error: any) {
+    console.error("Error:", error);
+    core.setFailed(`Action failed: ${error.message}`);
   }
 }
 
-main().catch((error) => {
-  console.error("Error:", error);
-  process.exit(1);
-});
+main();
