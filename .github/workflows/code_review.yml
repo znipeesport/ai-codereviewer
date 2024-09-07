@@ -1,19 +1,25 @@
 name: Code Review with OpenAI
+
 on:
   pull_request:
     types:
       - opened
       - synchronize
+
 permissions: write-all
+
 jobs:
   code_review:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
-      - name: Code Review
-        uses: freeedcom/ai-codereviewer@main
+
+      - name: AI Code Reviewer
+        uses: delmarcode/ai-codereviewer@main
         with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_MODEL: "gpt-4o"
+          REVIEW_MAX_COMMENTS: 5 # Optional: defaults to 10
           exclude: "yarn.lock,dist/**"
