@@ -43,7 +43,7 @@ interface GithubComment {
 }
 
 async function getPRDetails(): Promise<PRDetails> {
-  console.log("Fetching PR details...");
+  core.info("Fetching PR details...");
   const { repository, number } = JSON.parse(
     readFileSync(process.env.GITHUB_EVENT_PATH || "", "utf8")
   );
@@ -52,7 +52,7 @@ async function getPRDetails(): Promise<PRDetails> {
     repo: repository.name,
     pull_number: number,
   });
-  console.log(`PR details fetched for PR #${number}`);
+  core.info(`PR details fetched for PR #${number}`);
   return {
     owner: repository.owner.login,
     repo: repository.name,
@@ -67,7 +67,7 @@ async function getDiff(
   repo: string,
   pull_number: number
 ): Promise<string | null> {
-  console.log(`Fetching diff for PR #${pull_number}...`);
+  core.info(`Fetching diff for PR #${pull_number}...`);
   const response = await octokit.pulls.get({
     owner,
     repo,
@@ -82,7 +82,7 @@ async function analyzeCode(
   changedFiles: File[],
   prDetails: PRDetails
 ): Promise<Array<GithubComment>> {
-  console.log("Analyzing code...");
+  core.info("Analyzing code...");
   const prompt = createPrompt(changedFiles, prDetails);
   const aiResponse = await getAIResponse(prompt);
 
@@ -96,12 +96,12 @@ async function analyzeCode(
     }
   }
 
-  console.log(`Analysis complete. Generated ${comments.length} comments.`);
+  core.info(`Analysis complete. Generated ${comments.length} comments.`);
   return comments;
 }
 
 function createPrompt(changedFiles: File[], prDetails: PRDetails): string {
-  console.log("Creating prompt for AI...");
+  core.info("Creating prompt for AI...");
   const problemOutline = `Your task is to review pull requests (PR). Instructions:
 - Provide the response in following JSON format:  [{"file": <file name>,  "lineNumber":  <line_number>, "reviewComment": "<review comment>"}]
 - DO NOT give positive comments or compliments.
@@ -137,7 +137,7 @@ TAKE A DEEP BREATH AND WORK ON THIS THIS PROBLEM STEP-BY-STEP.
     }
   }
 
-  console.log("Prompt created successfully.");
+  core.info("Prompt created successfully.");
   return `${problemOutline}\n ${diffChunksPrompt.join("\n")}`;
 }
 
@@ -158,7 +158,7 @@ function createPromptForDiffChunk(file: File, chunk: Chunk): string {
 async function getAIResponse(
   prompt: string
 ): Promise<Array<AICommentResponse>> {
-  console.log("Sending request to OpenAI API...");
+  core.info("Sending request to OpenAI API...");
   const queryConfig = {
     model: OPENAI_API_MODEL,
     temperature: 0.2,
@@ -183,7 +183,7 @@ async function getAIResponse(
       throw new Error(`OpenAI API returned non-200 status: ${response.status}`);
     }
 
-    console.log("Received response from OpenAI API.");
+    core.info("Received response from OpenAI API.");
     const res = response.data.choices[0].message?.content?.trim() || "[]";
     // Remove any markdown formatting before parsing JSON
     const jsonString = res.replace(/```json\n|\n```/g, "").trim();
@@ -210,7 +210,7 @@ function createComments(
   changedFiles: File[],
   aiResponses: Array<AICommentResponse>
 ): Array<GithubComment> {
-  console.log("Creating GitHub comments from AI responses...");
+  core.info("Creating GitHub comments from AI responses...");
   return aiResponses
     .flatMap((aiResponse) => {
       const file = changedFiles.find((file) => file.to === aiResponse.file);
@@ -230,7 +230,7 @@ async function createReviewComment(
   pull_number: number,
   comments: Array<GithubComment>
 ): Promise<void> {
-  console.log(`Creating review comment for PR #${pull_number}...`);
+  core.info(`Creating review comment for PR #${pull_number}...`);
   await octokit.pulls.createReview({
     owner,
     repo,
@@ -238,7 +238,7 @@ async function createReviewComment(
     comments,
     event: APPROVE_REVIEWS ? "APPROVE" : "COMMENT",
   });
-  console.log(
+  core.info(
     `Review ${APPROVE_REVIEWS ? "approved" : "commented"} successfully.`
   );
 }
@@ -258,14 +258,14 @@ async function hasExistingReview(
 
 async function main() {
   try {
-    console.log("Starting AI code review process...");
+    core.info("Starting AI code review process...");
     const prDetails = await getPRDetails();
     let diff: string | null;
     const eventData = JSON.parse(
       readFileSync(process.env.GITHUB_EVENT_PATH ?? "", "utf8")
     );
 
-    console.log(`Processing ${eventData.action} event...`);
+    core.info(`Processing ${eventData.action} event...`);
     const existingReview = await hasExistingReview(
       prDetails.owner,
       prDetails.repo,
@@ -285,7 +285,7 @@ async function main() {
       const newBaseSha = eventData.before;
       const newHeadSha = eventData.after;
 
-      console.log(`Comparing commits: ${newBaseSha} -> ${newHeadSha}`);
+      core.info(`Comparing commits: ${newBaseSha} -> ${newHeadSha}`);
       const response = await octokit.repos.compareCommits({
         headers: {
           accept: "application/vnd.github.v3.diff",
@@ -298,17 +298,17 @@ async function main() {
 
       diff = String(response.data);
     } else {
-      console.log("Unsupported event:", process.env.GITHUB_EVENT_NAME);
+      core.info("Unsupported event:", process.env.GITHUB_EVENT_NAME);
       return;
     }
 
     if (!diff) {
-      console.log("No diff found");
+      core.info("No diff found");
       return;
     }
 
     const changedFiles = parseDiff(diff);
-    console.log(`Found ${changedFiles.length} changed files.`);
+    core.info(`Found ${changedFiles.length} changed files.`);
 
     const excludePatterns = core
       .getInput("exclude")
@@ -320,7 +320,7 @@ async function main() {
         minimatch(file.to ?? "", pattern)
       );
     });
-    console.log(`After filtering, ${filteredDiff.length} files remain.`);
+    core.info(`After filtering, ${filteredDiff.length} files remain.`);
 
     const comments = await analyzeCode(filteredDiff, prDetails);
     if (APPROVE_REVIEWS || comments.length > 0) {
@@ -331,9 +331,9 @@ async function main() {
         comments
       );
     } else {
-      console.log("No comments to post.");
+      core.info("No comments to post.");
     }
-    console.log("AI code review process completed successfully.");
+    core.info("AI code review process completed successfully.");
   } catch (error: any) {
     console.error("Error:", error);
     core.setFailed(`Action failed: ${error.message}`);
