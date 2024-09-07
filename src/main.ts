@@ -1,6 +1,7 @@
 import { readFileSync } from "fs";
 import * as core from "@actions/core";
 import { Configuration, OpenAIApi } from "openai";
+import OpenAI from "openai";
 import { Octokit } from "@octokit/rest";
 import parseDiff, { Chunk, File } from "parse-diff";
 import minimatch from "minimatch";
@@ -16,11 +17,9 @@ const RESPONSE_TOKENS = 1024;
 
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
-const configuration = new Configuration({
+const openai = new OpenAI({
   apiKey: OPENAI_API_KEY,
 });
-
-const openai = new OpenAIApi(configuration);
 
 interface PRDetails {
   owner: string;
@@ -168,11 +167,11 @@ async function getAIResponse(
     presence_penalty: 0,
     response_format: {
       type: "json_object",
-    },
+    } as const,
   };
 
   try {
-    const response = await openai.createChatCompletion({
+    const response = await openai.chat.completions.create({
       ...queryConfig,
       messages: [
         {
@@ -182,12 +181,12 @@ async function getAIResponse(
       ],
     });
 
-    if (response.status !== 200) {
-      throw new Error(`OpenAI API returned non-200 status: ${response.status}`);
+    if (!response.choices || response.choices.length === 0) {
+      throw new Error("OpenAI API returned an invalid response");
     }
 
     core.info("Received response from OpenAI API.");
-    const res = response.data.choices[0].message?.content?.trim() || "[]";
+    const res = response.choices[0].message?.content?.trim() || "[]";
     // Remove any markdown formatting before parsing JSON
     const jsonString = res.replace(/```json\n|\n```/g, "").trim();
     return JSON.parse(jsonString);
@@ -301,7 +300,7 @@ async function main() {
 
       diff = String(response.data);
     } else {
-      core.info("Unsupported event:", process.env.GITHUB_EVENT_NAME);
+      core.info(`Unsupported event: ${process.env.GITHUB_EVENT_NAME}`);
       return;
     }
 
