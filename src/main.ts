@@ -1,6 +1,5 @@
 import { readFileSync } from "fs";
 import * as core from "@actions/core";
-import { Configuration, OpenAIApi } from "openai";
 import OpenAI from "openai";
 import { Octokit } from "@octokit/rest";
 import parseDiff, { Chunk, File } from "parse-diff";
@@ -43,15 +42,19 @@ interface GithubComment {
 
 async function getPRDetails(): Promise<PRDetails> {
   core.info("Fetching PR details...");
+
   const { repository, number } = JSON.parse(
     readFileSync(process.env.GITHUB_EVENT_PATH || "", "utf8")
   );
+
   const prResponse = await octokit.pulls.get({
     owner: repository.owner.login,
     repo: repository.name,
     pull_number: number,
   });
+
   core.info(`PR details fetched for PR #${number}`);
+
   return {
     owner: repository.owner.login,
     repo: repository.name,
@@ -67,12 +70,14 @@ async function getDiff(
   pull_number: number
 ): Promise<string | null> {
   core.info(`Fetching diff for PR #${pull_number}...`);
+
   const response = await octokit.pulls.get({
     owner,
     repo,
     pull_number,
     mediaType: { format: "diff" },
   });
+
   // @ts-expect-error - response.data is a string
   return response.data;
 }
@@ -82,8 +87,11 @@ async function analyzeCode(
   prDetails: PRDetails
 ): Promise<Array<GithubComment>> {
   core.info("Analyzing code...");
+
   const prompt = createPrompt(changedFiles, prDetails);
   const aiResponse = await getAIResponse(prompt);
+  core.info(JSON.stringify(aiResponse, null, 2));
+  console.log(JSON.stringify(aiResponse, null, 2));
 
   const comments: Array<GithubComment> = [];
 
@@ -102,7 +110,7 @@ async function analyzeCode(
 function createPrompt(changedFiles: File[], prDetails: PRDetails): string {
   core.info("Creating prompt for AI...");
   const problemOutline = `Your task is to review pull requests (PR). Instructions:
-- Provide the response in following JSON format:  [{"file": <file name>,  "lineNumber":  <line_number>, "reviewComment": "<review comment>"}]
+- Provide the response in following JSON format:  {"comments": [{"file": <file name>,  "lineNumber":  <line_number>, "reviewComment": "<review comment>"}]}
 - DO NOT give positive comments or compliments.
 - DO NOT give advice on renaming variable names or writing more descriptive variables.
 - Provide comments and suggestions ONLY if there is something to improve, otherwise return an empty array.
@@ -158,6 +166,7 @@ async function getAIResponse(
   prompt: string
 ): Promise<Array<AICommentResponse>> {
   core.info("Sending request to OpenAI API...");
+
   const queryConfig = {
     model: OPENAI_API_MODEL,
     temperature: 0.2,
@@ -186,21 +195,33 @@ async function getAIResponse(
     }
 
     core.info("Received response from OpenAI API.");
-    const res = response.choices[0].message?.content?.trim() || "[]";
-    // Remove any markdown formatting before parsing JSON
-    const jsonString = res.replace(/```json\n|\n```/g, "").trim();
-    return JSON.parse(jsonString);
+    const res = response.choices[0].message?.content?.trim() || "{}";
+
+    // Remove any markdown formatting and ensure valid JSON
+    const jsonString = res.replace(/^```json\s*|\s*```$/g, "").trim();
+
+    try {
+      let data = JSON.parse(jsonString);
+      if (!Array.isArray(data?.comments)) {
+        throw new Error("Invalid response from OpenAI API");
+      }
+      return data.comments;
+    } catch (parseError) {
+      core.error(`Failed to parse JSON: ${jsonString}`);
+      core.error(`Parse error: ${parseError}`);
+      throw parseError;
+    }
   } catch (error: any) {
-    console.error("Error Message:", error?.message || error);
+    core.error("Error Message:", error?.message || error);
 
     if (error?.response) {
-      console.error("Response Data:", error.response.data);
-      console.error("Response Status:", error.response.status);
-      console.error("Response Headers:", error.response.headers);
+      core.error("Response Data:", error.response.data);
+      core.error("Response Status:", error.response.status);
+      core.error("Response Headers:", error.response.headers);
     }
 
     if (error?.config) {
-      console.error("Config:", error.config);
+      core.error("Config:", error.config);
     }
 
     core.setFailed(`OpenAI API request failed: ${error.message}`);
@@ -213,6 +234,7 @@ function createComments(
   aiResponses: Array<AICommentResponse>
 ): Array<GithubComment> {
   core.info("Creating GitHub comments from AI responses...");
+
   return aiResponses
     .flatMap((aiResponse) => {
       const file = changedFiles.find((file) => file.to === aiResponse.file);
@@ -233,6 +255,7 @@ async function createReviewComment(
   comments: Array<GithubComment>
 ): Promise<void> {
   core.info(`Creating review comment for PR #${pull_number}...`);
+
   await octokit.pulls.createReview({
     owner,
     repo,
@@ -240,6 +263,7 @@ async function createReviewComment(
     comments,
     event: APPROVE_REVIEWS ? "APPROVE" : "COMMENT",
   });
+
   core.info(
     `Review ${APPROVE_REVIEWS ? "approved" : "commented"} successfully.`
   );
@@ -261,6 +285,7 @@ async function hasExistingReview(
 async function main() {
   try {
     core.info("Starting AI code review process...");
+
     const prDetails = await getPRDetails();
     let diff: string | null;
     const eventData = JSON.parse(
@@ -337,10 +362,17 @@ async function main() {
     }
     core.info("AI code review process completed successfully.");
   } catch (error: any) {
-    console.error("Error:", error);
+    core.error("Error:", error);
     core.setFailed(`Action failed: ${error.message}`);
     process.exit(1); // This line ensures the GitHub action fails
   }
 }
 
-main();
+core.info("Starting AI code review action...");
+main().catch((error) => {
+  core.error("Unhandled error in main function:", error);
+  core.setFailed(
+    `Unhandled error in main function: ${(error as Error).message}`
+  );
+  process.exit(1);
+});

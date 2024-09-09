@@ -6,10 +6,20 @@ review process.
 
 ## Features
 
-- Reviews pull requests using OpenAI's GPT-4 API.
+- Reviews pull requests using OpenAI's GPT-4o API.
 - Provides intelligent comments and suggestions for improving your code.
 - Filters out files that match specified exclude patterns.
 - Easy to set up and integrate into your GitHub workflow.
+
+## Development
+
+Don't forget to build and package before committing your changes.
+
+```bash
+yarn format
+yarn build
+yarn package
+```
 
 ## Setup
 
