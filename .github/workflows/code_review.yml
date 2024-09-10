@@ -12,22 +12,15 @@ jobs:
   code_review:
     runs-on: ubuntu-latest
     steps:
-      - name: Generate a token
-        id: generate-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ vars.WINGMAN_APP_ID }}
-          private-key: ${{ secrets.WINGMAN_PRIVATE_KEY }}
-
       - name: Checkout repository
         uses: actions/checkout@v3
 
       - name: AI Code Reviewer
         uses: ./.
         with:
-          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENAI_API_MODEL: "gpt-4o"
+          OPENAI_API_MODEL: "gpt-4o-mini"
           REVIEW_MAX_COMMENTS: 5 # Optional: defaults to 10
           APPROVE_REVIEWS: true # Optional: defaults to false
           exclude: "yarn.lock,dist/**"
