@@ -10,7 +10,7 @@ inputs:
   OPENAI_API_MODEL:
     description: "OpenAI API model."
     required: false
-    default: "gpt-4"
+    default: "gpt-4o-mini"
   REVIEW_MAX_COMMENTS:
     description: "Maximum number of comments to include in a review (per diff)."
     required: false
