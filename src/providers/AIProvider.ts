@@ -9,7 +9,12 @@ export interface ReviewRequest {
   files: Array<{
     path: string;
     content: string;
+    originalContent?: string;
     diff?: string;
+  }>;
+  contextFiles?: Array<{
+    path: string;
+    content: string;
   }>;
   pullRequest: {
     title: string;
@@ -17,7 +22,7 @@ export interface ReviewRequest {
     base: string;
     head: string;
   };
-  context?: {
+  context: {
     repository: string;
     owner: string;
     projectContext?: string;

@@ -14,21 +14,26 @@ export class ReviewService {
     // Get PR details
     const prDetails = await this.githubService.getPRDetails(prNumber);
 
-    // Get relevant files
-    const files = await this.diffService.getRelevantFiles(prDetails);
-    
-    // Get full content for modified files
+    // Get modified files from diff
+    const modifiedFiles = await this.diffService.getRelevantFiles(prDetails);
+
+    // Get full content for each modified file
     const filesWithContent = await Promise.all(
-      files.map(async (file: { path: string; diff: string }) => ({
+      modifiedFiles.map(async (file) => ({
         path: file.path,
-        content: await this.githubService.getFileContent(file.path),
+        content: await this.githubService.getFileContent(file.path, prDetails.head),
+        originalContent: await this.githubService.getFileContent(file.path, prDetails.base),
         diff: file.diff,
       }))
     );
 
+    // Get repository context (package.json, readme, etc)
+    const contextFiles = await this.getRepositoryContext();
+
     // Perform AI review
     const review = await this.aiProvider.review({
       files: filesWithContent,
+      contextFiles,
       pullRequest: {
         title: prDetails.title,
         description: prDetails.description,
@@ -38,12 +43,44 @@ export class ReviewService {
       context: {
         repository: process.env.GITHUB_REPOSITORY ?? '',
         owner: process.env.GITHUB_REPOSITORY_OWNER ?? '',
+        projectContext: process.env.INPUT_PROJECT_CONTEXT,
       },
     });
 
     // Submit review
-    await this.githubService.submitReview(prNumber, review);
+    await this.githubService.submitReview(prNumber, {
+      ...review,
+      event: this.normalizeReviewEvent(review.suggestedAction),
+    });
 
     return review;
+  }
+
+  private async getRepositoryContext(): Promise<Array<{path: string, content: string}>> {
+    const contextFiles = ['package.json', 'README.md', 'tsconfig.json']; // TODO: This should be configurable
+    const results = [];
+
+    for (const file of contextFiles) {
+      try {
+        const content = await this.githubService.getFileContent(file);
+        if (content) {
+          results.push({ path: file, content });
+        }
+      } catch (error) {
+        // File might not exist, skip it
+      }
+    }
+
+    return results;
+  }
+
+  private normalizeReviewEvent(action: string): 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT' {
+    const eventMap: Record<string, 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT'> = {
+      'approve': 'APPROVE',
+      'request_changes': 'REQUEST_CHANGES',
+      'comment': 'COMMENT',
+    };
+
+    return eventMap[action.toLowerCase()] || 'COMMENT';
   }
 }
