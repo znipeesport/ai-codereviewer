@@ -48,7 +48,7 @@ export class OpenAIProvider implements AIProvider {
     return {
       summary: content.summary,
       lineComments: content.comments,
-      suggestedAction: content.suggestion,
+      suggestedAction: content.suggestedAction,
       confidence: content.confidence,
     };
   }
