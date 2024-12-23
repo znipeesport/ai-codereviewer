@@ -5,10 +5,12 @@ import { resolve } from 'path';
 dotenv.config();
 
 // Set required environment variables for the action
-process.env.GITHUB_EVENT_PATH = resolve(__dirname, '../test-pr-payload-982.json');
+process.env.GITHUB_EVENT_PATH = resolve(__dirname, './pull-requests/test-pr-payload-982.json');
 process.env.GITHUB_WORKSPACE = resolve(__dirname, '..');
 process.env.GITHUB_REPOSITORY = 'demandio/simplycodes-extension';
-process.env.GITHUB_TOKEN = process.env.INPUT_GITHUB_TOKEN;
+
+// IMPORTANT: Make sure the token is set before setting INPUT_GITHUB_TOKEN
+process.env.GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.INPUT_GITHUB_TOKEN;
 
 // Set action inputs (these would normally come from action.yml)
 process.env.INPUT_GITHUB_TOKEN = process.env.GITHUB_TOKEN;
