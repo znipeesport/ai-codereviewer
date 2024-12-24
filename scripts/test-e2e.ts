@@ -33,10 +33,10 @@ process.env.INPUT_GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 process.env.INPUT_AI_PROVIDER = process.env.INPUT_AI_PROVIDER || 'openai';
 process.env.INPUT_AI_API_KEY = process.env.INPUT_AI_API_KEY || process.env.OPENAI_API_KEY;
 process.env.INPUT_AI_MODEL = process.env.INPUT_AI_MODEL || 'gpt-4o-mini';
-process.env.INPUT_REVIEW_MAX_COMMENTS = process.env.INPUT_REVIEW_MAX_COMMENTS || '10';
-process.env.INPUT_EXCLUDE = '**/*.md,**/*.json';
-process.env.INPUT_APPROVE_REVIEWS = 'false';
-process.env.INPUT_REVIEW_PROJECT_CONTEXT = 'This is a browser extension for SimplyCodes';
+// process.env.INPUT_REVIEW_MAX_COMMENTS = process.env.INPUT_REVIEW_MAX_COMMENTS || '10';
+// process.env.INPUT_EXCLUDE = '**/*.md,**/*.json';
+// process.env.INPUT_APPROVE_REVIEWS = 'false';
+// process.env.INPUT_REVIEW_PROJECT_CONTEXT = 'This is a browser extension for SimplyCodes';
 
 // Run the action
 require('../lib/src/main');
