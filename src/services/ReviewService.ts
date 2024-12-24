@@ -52,6 +52,10 @@ export class ReviewService {
       },
     });
 
+    // Add model name to summary
+    const modelInfo = `_Code review performed by \`${process.env.INPUT_AI_PROVIDER?.toUpperCase() || 'AI'} - ${process.env.INPUT_AI_MODEL}\`._`;
+    review.summary = `${review.summary}\n\n------\n\n${modelInfo}`;
+
     // Submit review
     await this.githubService.submitReview(prNumber, {
       ...review,
