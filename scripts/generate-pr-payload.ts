@@ -6,8 +6,13 @@ dotenv.config();
 
 const token = process.env.GITHUB_TOKEN;
 const owner = 'demandio';
-const repo = 'simplycodes-extension';
-const pr_number = 982;
+const repo = process.argv[2] || 'simplycodes-extension';
+const pr_number = parseInt(process.argv[3], 10) || 982;
+
+if (!owner || !repo || isNaN(pr_number)) {
+  console.error('Usage: ts-node generate-pr-payload.ts [owner] [repo] [pr_number]');
+  process.exit(1);
+}
 
 async function generatePRPayload() {
   const octokit = new Octokit({ auth: token });
