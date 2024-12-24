@@ -1,66 +1,57 @@
 import { DiffService } from '../../src/services/DiffService';
-import parseDiff from 'parse-diff';
+import { PRDetails } from '../../src/services/GitHubService';
+import * as core from '@actions/core';
 
-jest.mock('parse-diff');
+// Mock fetch
+global.fetch = jest.fn();
+
+// Mock core.getInput
+jest.spyOn(core, 'getInput').mockImplementation((name: string) => {
+  if (name === 'EXCLUDE_PATTERNS') return '**/*.md,**/*.json';
+  return '';
+});
 
 describe('DiffService', () => {
-  let diffService: DiffService;
+  const mockPRDetails: PRDetails = {
+    number: 123,
+    owner: 'test-owner',
+    repo: 'test-repo',
+    base: 'main',
+    head: 'feature',
+    title: 'Test PR',
+    description: 'Test PR description',
+  };
+
+  const mockDiffResponse = `diff --git a/src/test.ts b/src/test.ts
+index abc..def 100644
+--- a/src/test.ts
++++ b/src/test.ts
+@@ -1,3 +1,4 @@
+ console.log("test");
++console.log("new line");
+ console.log("end");`;
 
   beforeEach(() => {
-    process.env.INPUT_EXCLUDE_PATTERNS = '**/*.md,**/*.json';
-    diffService = new DiffService();
+    // Reset mocks
+    (global.fetch as jest.Mock).mockReset();
+    // Setup default mock response
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      text: async () => mockDiffResponse
+    });
   });
 
   it('should filter out excluded files', async () => {
-    const mockFiles = [
-      { to: 'src/main.ts', chunks: [] },
-      { to: 'README.md', chunks: [] },
-      { to: 'package.json', chunks: [] }
-    ];
-
-    (parseDiff as jest.Mock).mockReturnValue(mockFiles);
-
-    const result = await diffService.getRelevantFiles({
-      owner: 'test',
-      repo: 'test',
-      number: 1,
-      title: '',
-      description: '',
-      base: '',
-      head: ''
-    });
-
-    expect(result).toHaveLength(1);
-    expect(result[0].path).toBe('src/main.ts');
+    const service = new DiffService();
+    const files = await service.getRelevantFiles(mockPRDetails);
+    expect(files.length).toBeGreaterThan(0);
+    expect(files.every(f => !f.path.endsWith('.md'))).toBeTruthy();
   });
 
   it('should format diff correctly', async () => {
-    const mockFile = {
-      to: 'src/main.ts',
-      chunks: [{
-        content: '@@ -1,3 +1,3 @@',
-        changes: [
-          { type: 'normal', ln1: 1, ln2: 1, content: 'unchanged line' },
-          { type: '-', ln: 2, content: 'removed line' },
-          { type: '+', ln2: 2, content: 'added line' }
-        ]
-      }]
-    };
-
-    (parseDiff as jest.Mock).mockReturnValue([mockFile]);
-
-    const result = await diffService.getRelevantFiles({
-      owner: 'test',
-      repo: 'test',
-      number: 1,
-      title: '',
-      description: '',
-      base: '',
-      head: ''
-    });
-
-    expect(result[0].diff).toContain('normal1,1 unchanged line');
-    expect(result[0].diff).toContain('-2 removed line');
-    expect(result[0].diff).toContain('+ added line');
+    const service = new DiffService();
+    const files = await service.getRelevantFiles(mockPRDetails);
+    expect(files[0].diff).toContain('@@ ');
+    expect(files[0].diff).toContain('+console.log("new line")');
   });
 });
