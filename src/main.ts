@@ -25,7 +25,7 @@ async function main() {
 
     // Initialize services
     const githubService = new GitHubService(githubToken);
-    const diffService = new DiffService();
+    const diffService = new DiffService(githubToken);
     const reviewService = new ReviewService(
       aiProvider,
       githubService,

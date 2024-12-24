@@ -5,8 +5,10 @@ import { PRDetails } from './GitHubService';
 
 export class DiffService {
   private excludePatterns: string[];
+  private githubToken: string;
 
-  constructor() {
+  constructor(githubToken: string) {
+    this.githubToken = githubToken;
     this.excludePatterns = core.getInput('EXCLUDE_PATTERNS')
       .split(',')
       .map(p => p.trim());
@@ -23,7 +25,7 @@ export class DiffService {
 
     const response = await fetch(diffUrl, {
       headers: {
-        'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
+        'Authorization': `Bearer ${this.githubToken}`,
         'Accept': 'application/vnd.github.v3.diff'
       }
     });
