@@ -17,7 +17,15 @@ if (!owner || !repo || isNaN(pr_number)) {
 async function generatePRPayload() {
   const octokit = new Octokit({ auth: token });
   
+  // Get PR details
   const { data: pr } = await octokit.pulls.get({
+    owner,
+    repo,
+    pull_number: pr_number,
+  });
+
+  // Get PR diff
+  const { data: files } = await octokit.pulls.listFiles({
     owner,
     repo,
     pull_number: pr_number,
@@ -26,7 +34,10 @@ async function generatePRPayload() {
   // Format as GitHub webhook payload
   const payload = {
     action: 'opened',
-    pull_request: pr,
+    pull_request: {
+      ...pr,
+      files: files  // Add the files with their diffs
+    },
     repository: {
       name: repo,
       owner: {

@@ -2,6 +2,7 @@ import { AIProvider } from '../providers/AIProvider';
 import { GitHubService } from '../services/GitHubService';
 import { DiffService } from '../services/DiffService';
 import { ReviewResponse } from '../providers/AIProvider';
+import * as core from '@actions/core';
 
 export class ReviewService {
   constructor(
@@ -11,11 +12,15 @@ export class ReviewService {
   ) {}
 
   async performReview(prNumber: number): Promise<ReviewResponse> {
+    core.info(`Starting review for PR #${prNumber}`);
+
     // Get PR details
     const prDetails = await this.githubService.getPRDetails(prNumber);
+    core.info(`PR title: ${prDetails.title}`);
 
     // Get modified files from diff
     const modifiedFiles = await this.diffService.getRelevantFiles(prDetails);
+    core.info(`Modified files length: ${modifiedFiles.length}`);
 
     // Get full content for each modified file
     const filesWithContent = await Promise.all(
@@ -57,7 +62,7 @@ export class ReviewService {
   }
 
   private async getRepositoryContext(): Promise<Array<{path: string, content: string}>> {
-    const contextFiles = ['package.json', 'README.md', 'tsconfig.json']; // TODO: This should be configurable
+    const contextFiles = ['package.json', 'README.md']; // TODO: This should be configurable
     const results = [];
 
     for (const file of contextFiles) {

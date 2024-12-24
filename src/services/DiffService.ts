@@ -14,10 +14,23 @@ export class DiffService {
 
   async getRelevantFiles(prDetails: PRDetails): Promise<Array<{ path: string; diff: string }>> {
     const response = await fetch(
-      `https://api.github.com/repos/${prDetails.owner}/${prDetails.repo}/pulls/${prDetails.number}.diff`
+      `https://api.github.com/repos/${prDetails.owner}/${prDetails.repo}/pulls/${prDetails.number}.diff`,
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
+          'Accept': 'application/vnd.github.v3.diff'
+        }
+      }
     );
+
+    if (!response.ok) {
+      core.error(`Failed to fetch diff: ${await response.text()}`);
+      throw new Error(`Failed to fetch diff: ${response.statusText}`);
+    }
+
     const diffText = await response.text();
-    
+    core.info(`Diff text length: ${diffText.length}`);
+
     const files = parseDiff(diffText);
     return this.filterRelevantFiles(files);
   }
