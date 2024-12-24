@@ -50,7 +50,7 @@ export class ReviewService {
     // Submit review
     await this.githubService.submitReview(prNumber, {
       ...review,
-      event: this.normalizeReviewEvent(review.suggestedAction),
+      suggestedAction: this.normalizeReviewEvent(review.suggestedAction),
     });
 
     return review;

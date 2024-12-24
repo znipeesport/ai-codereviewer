@@ -1,5 +1,6 @@
 import { Octokit } from '@octokit/rest';
 import * as core from '@actions/core';
+import { ReviewResponse } from '../providers/AIProvider';
 
 export interface PRDetails {
   owner: string;
@@ -58,16 +59,23 @@ export class GitHubService {
     }
   }
 
-  async submitReview(prNumber: number, review: any) {
-    const { lineComments, summary, suggestedAction } = review;
+  async submitReview(prNumber: number, review: ReviewResponse) {
+    const { summary, lineComments = [], suggestedAction } = review;
+    
+    // Convert our line comments to GitHub's expected format
+    const comments = lineComments.map(comment => ({
+      path: comment.path,
+      position: comment.line,
+      body: comment.comment
+    }));
 
     await this.octokit.pulls.createReview({
       owner: this.owner,
       repo: this.repo,
       pull_number: prNumber,
       body: summary,
-      comments: lineComments,
-      event: suggestedAction,
+      comments,
+      event: suggestedAction.toUpperCase() as 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT'
     });
   }
 }

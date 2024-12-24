@@ -36,7 +36,7 @@ export interface ReviewResponse {
     line: number;
     comment: string;
   }>;
-  suggestedAction: 'approve' | 'request_changes' | 'comment';
+  suggestedAction: 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT';
   confidence: number;
 }
 
