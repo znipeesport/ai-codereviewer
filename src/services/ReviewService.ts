@@ -80,6 +80,10 @@ export class ReviewService {
   }
 
   private normalizeReviewEvent(action: string): 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT' {
+    if (!action) {
+      return 'COMMENT';
+    }
+
     const eventMap: Record<string, 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT'> = {
       'approve': 'APPROVE',
       'request_changes': 'REQUEST_CHANGES',
