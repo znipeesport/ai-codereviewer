@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { AIProvider, AIProviderConfig, ReviewRequest, ReviewResponse } from './AIProvider';
 import * as core from '@actions/core';
+import { baseCodeReviewPrompt } from '../prompts';
 
 export class OpenAIProvider implements AIProvider {
   private config!: AIProviderConfig;
@@ -20,7 +21,7 @@ export class OpenAIProvider implements AIProvider {
       messages: [
         {
           role: 'system',
-          content: 'You are an expert code reviewer. Analyze the provided code changes and provide detailed, actionable feedback. Format your response as JSON with the following structure: { "summary": "overall review", "comments": [{"path": "file_path", "line": number, "comment": "comment text"}], "suggestedAction": "approve|request_changes|comment", "confidence": number }. The suggestedAction must be one of these exact values: "approve", "request_changes", or "comment".',
+          content: baseCodeReviewPrompt,
         },
         {
           role: 'user',
