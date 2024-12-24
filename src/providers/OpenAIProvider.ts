@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { AIProvider, AIProviderConfig, ReviewRequest, ReviewResponse } from './AIProvider';
+import * as core from '@actions/core';
 
 export class OpenAIProvider implements AIProvider {
   private config!: AIProviderConfig;
@@ -12,7 +13,8 @@ export class OpenAIProvider implements AIProvider {
 
   async review(request: ReviewRequest): Promise<ReviewResponse> {
     const prompt = this.buildPrompt(request);
-    
+    core.info(`Sending request to OpenAI with prompt structure: ${JSON.stringify(request, null, 2)}`);
+
     const response = await this.client.chat.completions.create({
       model: this.config.model,
       messages: [
@@ -29,7 +31,12 @@ export class OpenAIProvider implements AIProvider {
       response_format: { type: 'json_object' },
     });
 
-    return this.parseResponse(response);
+    core.info(`Raw OpenAI response: ${JSON.stringify(response.choices[0].message.content, null, 2)}`);
+
+    const parsedResponse = this.parseResponse(response);
+    core.info(`Parsed response: ${JSON.stringify(parsedResponse, null, 2)}`);
+
+    return parsedResponse;
   }
 
   private buildPrompt(request: ReviewRequest): string {

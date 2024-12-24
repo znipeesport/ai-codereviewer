@@ -61,13 +61,20 @@ export class GitHubService {
 
   async submitReview(prNumber: number, review: ReviewResponse) {
     const { summary, lineComments = [], suggestedAction } = review;
-    
-    // Convert our line comments to GitHub's expected format
-    const comments = lineComments.map(comment => ({
-      path: comment.path,
-      position: comment.line,
-      body: comment.comment
+
+    // Convert line comments to GitHub review comments format
+    const comments = await Promise.all(lineComments.map(async comment => {
+      // Get the position in the diff for this line
+      const position = await this.getDiffPosition(prNumber, comment.path, comment.line);
+
+      return {
+        path: comment.path,
+        position, // Use diff position instead of line number
+        body: comment.comment
+      };
     }));
+
+    core.info(`Submitting review with comments: ${JSON.stringify(comments, null, 2)}`);
 
     await this.octokit.pulls.createReview({
       owner: this.owner,
@@ -77,5 +84,50 @@ export class GitHubService {
       comments,
       event: suggestedAction.toUpperCase() as 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT'
     });
+  }
+
+  private async getDiffPosition(prNumber: number, filePath: string, line: number): Promise<number> {
+    const { data: files } = await this.octokit.pulls.listFiles({
+      owner: this.owner,
+      repo: this.repo,
+      pull_number: prNumber
+    });
+
+    const file = files.find(f => f.filename === filePath);
+    if (!file) {
+      throw new Error(`File ${filePath} not found in PR diff`);
+    }
+
+    core.debug(`Processing diff for ${filePath}:`);
+    core.debug(file.patch || '');
+
+    // Parse the patch and find the position
+    const patch = file.patch || '';
+    let position = 0;
+    let currentLine = 0;
+    let inHunk = false;
+
+    for (const patchLine of patch.split('\n')) {
+      if (patchLine.startsWith('@@')) {
+        // Parse hunk header
+        const match = patchLine.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+        if (match) {
+          currentLine = parseInt(match[1], 10) - 1;
+          inHunk = true;
+        }
+      } else if (inHunk) {
+        position++;
+        if (patchLine.startsWith('+') || !patchLine.startsWith('-')) {
+          currentLine++;
+          core.debug(`Line ${currentLine} at position ${position}`);
+          if (currentLine === line) {
+            return position;
+          }
+        }
+      }
+    }
+
+    core.error(`Failed to find line ${line} in diff. Last line processed: ${currentLine}`);
+    throw new Error(`Line ${line} not found in diff for ${filePath}`);
   }
 }
