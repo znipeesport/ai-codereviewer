@@ -5,6 +5,7 @@ import { GeminiProvider } from './providers/GeminiProvider';
 import { ReviewService } from './services/ReviewService';
 import { GitHubService } from './services/GitHubService';
 import { DiffService } from './services/DiffService';
+import { readFileSync } from 'fs';
 
 async function main() {
   try {
@@ -58,10 +59,24 @@ function getProvider(provider: string) {
 }
 
 function getPRNumberFromContext(): number {
-  const githubContext = JSON.parse(
-    process.env.GITHUB_CONTEXT ?? '{}'
-  );
-  return githubContext.event.pull_request.number;
+  try {
+    const eventPath = process.env.GITHUB_EVENT_PATH;
+    if (!eventPath) {
+      throw new Error('GITHUB_EVENT_PATH is not set');
+    }
+
+    const { pull_request } = JSON.parse(
+      readFileSync(eventPath, 'utf8')
+    );
+
+    if (!pull_request?.number) {
+      throw new Error('Could not get pull request number from event payload');
+    }
+
+    return pull_request.number;
+  } catch (error) {
+    throw new Error(`Failed to get PR number: ${error}`);
+  }
 }
 
 main().catch(error => {

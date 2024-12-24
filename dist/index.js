@@ -47,6 +47,7 @@ const GeminiProvider_1 = __nccwpck_require__(5720);
 const ReviewService_1 = __nccwpck_require__(7053);
 const GitHubService_1 = __nccwpck_require__(7076);
 const DiffService_1 = __nccwpck_require__(1676);
+const fs_1 = __nccwpck_require__(9896);
 async function main() {
     var _a, _b;
     try {
@@ -89,9 +90,20 @@ function getProvider(provider) {
     }
 }
 function getPRNumberFromContext() {
-    var _a;
-    const githubContext = JSON.parse((_a = process.env.GITHUB_CONTEXT) !== null && _a !== void 0 ? _a : '{}');
-    return githubContext.event.pull_request.number;
+    try {
+        const eventPath = process.env.GITHUB_EVENT_PATH;
+        if (!eventPath) {
+            throw new Error('GITHUB_EVENT_PATH is not set');
+        }
+        const { pull_request } = JSON.parse((0, fs_1.readFileSync)(eventPath, 'utf8'));
+        if (!(pull_request === null || pull_request === void 0 ? void 0 : pull_request.number)) {
+            throw new Error('Could not get pull request number from event payload');
+        }
+        return pull_request.number;
+    }
+    catch (error) {
+        throw new Error(`Failed to get PR number: ${error}`);
+    }
 }
 main().catch(error => {
     core.setFailed(`Unhandled error: ${error.message}`);
