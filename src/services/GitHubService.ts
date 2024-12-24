@@ -130,4 +130,34 @@ export class GitHubService {
     core.error(`Failed to find line ${line} in diff. Last line processed: ${currentLine}`);
     throw new Error(`Line ${line} not found in diff for ${filePath}`);
   }
+
+  async getLastReviewedCommit(prNumber: number): Promise<string | null> {
+    const { data: reviews } = await this.octokit.pulls.listReviews({
+      owner: this.owner,
+      repo: this.repo,
+      pull_number: prNumber,
+    });
+
+    // Find the last review from our bot
+    const lastBotReview = reviews
+      .reverse()
+      .find(review => review.user?.login === 'github-actions[bot]');
+
+    if (!lastBotReview) return null;
+
+    // Get the commit SHA at the time of the review
+    const { data: commits } = await this.octokit.pulls.listCommits({
+      owner: this.owner,
+      repo: this.repo,
+      pull_number: prNumber,
+    });
+
+    const reviewDate = new Date(lastBotReview.submitted_at!);
+    const lastCommit = commits
+      .reverse()
+      .find(commit => commit.commit.committer?.date &&
+        new Date(commit.commit.committer.date) <= reviewDate);
+
+    return lastCommit?.sha || null;
+  }
 }
