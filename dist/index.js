@@ -65,7 +65,7 @@ async function main() {
         });
         // Initialize services
         const githubService = new GitHubService_1.GitHubService(githubToken);
-        const diffService = new DiffService_1.DiffService();
+        const diffService = new DiffService_1.DiffService(githubToken);
         const reviewService = new ReviewService_1.ReviewService(aiProvider, githubService, diffService);
         // Get PR number from GitHub context
         const prNumber = getPRNumberFromContext();
@@ -568,7 +568,8 @@ const parse_diff_1 = __importDefault(__nccwpck_require__(2673));
 const minimatch_1 = __nccwpck_require__(6507);
 const core = __importStar(__nccwpck_require__(7484));
 class DiffService {
-    constructor() {
+    constructor(githubToken) {
+        this.githubToken = githubToken;
         this.excludePatterns = core.getInput('EXCLUDE_PATTERNS')
             .split(',')
             .map(p => p.trim());
@@ -580,7 +581,7 @@ class DiffService {
             `${baseUrl}.diff`;
         const response = await fetch(diffUrl, {
             headers: {
-                'Authorization': `Bearer ${process.env.GITHUB_TOKEN}`,
+                'Authorization': `Bearer ${this.githubToken}`,
                 'Accept': 'application/vnd.github.v3.diff'
             }
         });
