@@ -63,16 +63,23 @@ export class GitHubService {
     const { summary, lineComments = [], suggestedAction } = review;
 
     // Convert line comments to GitHub review comments format
-    const comments = await Promise.all(lineComments.map(async comment => {
-      // Get the position in the diff for this line
-      const position = await this.getDiffPosition(prNumber, comment.path, comment.line);
+    const allComments = await Promise.all(lineComments.map(async comment => {
+      try {
+        // Get the position in the diff for this line
+        const position = await this.getDiffPosition(prNumber, comment.path, comment.line);
 
-      return {
-        path: comment.path,
-        position, // Use diff position instead of line number
-        body: comment.comment
-      };
+        return {
+          path: comment.path,
+          position, // Use diff position instead of line number
+          body: comment.comment
+        };
+      } catch (error) {
+        core.warning(`Failed to get diff position for ${comment.path}: ${error}`);
+        return null;
+      }
     }));
+
+    const comments = allComments.filter(comment => comment !== null);
 
     core.info(`Submitting review with comments: ${JSON.stringify(comments, null, 2)}`);
 
