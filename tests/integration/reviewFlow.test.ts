@@ -69,9 +69,14 @@ describe('Pull Request Review Flow', () => {
 
   it('should perform a complete review flow', async () => {
     const githubService = new GitHubService('mock-token');
-    const diffService = new DiffService('mock-token');
+    const diffService = new DiffService('mock-token', '**/*.md,**/*.json');
     const aiProvider = new OpenAIProvider();
-    const reviewService = new ReviewService(aiProvider, githubService, diffService);
+    const reviewService = new ReviewService(aiProvider, githubService, diffService, {
+      maxComments: 0,
+      approveReviews: false,
+      projectContext: '',
+      contextFiles: []
+    });
 
     // Mock AI provider
     jest.spyOn(aiProvider, 'review').mockResolvedValue({

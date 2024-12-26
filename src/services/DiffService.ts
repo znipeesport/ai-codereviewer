@@ -7,9 +7,9 @@ export class DiffService {
   private excludePatterns: string[];
   private githubToken: string;
 
-  constructor(githubToken: string) {
+  constructor(githubToken: string, excludePatterns: string) {
     this.githubToken = githubToken;
-    this.excludePatterns = core.getInput('EXCLUDE_PATTERNS')
+    this.excludePatterns = excludePatterns
       .split(',')
       .map(p => p.trim());
   }
