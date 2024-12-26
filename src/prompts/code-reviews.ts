@@ -42,7 +42,15 @@ For the "comments" field, provide a list of comments. Each comment should have t
 - path: The path to the file that the comment is about
 - line: The line number in the file that the comment is about
 - comment: The comment text
-Comments should ONLY be added to lines or blocks of code that have issues.
+Other rules for "comments" field:
+- Comments should ONLY be added to lines or blocks of code that have issues.
+- ONLY use line numbers that appear in the "diff" property of each file
+- Each diff line starts with a prefix:
+  * "normal" for unchanged lines
+  * "del" for removed lines
+  * "add" for added lines
+- Extract the line number that appears after the prefix
+- DO NOT use line number 0 or line numbers not present in the diff
 
 For the "suggestedAction" field, provide a single word that indicates the action to be taken. Options are:
 - "approve"
@@ -59,6 +67,7 @@ When reviewing updates to a PR:
 3. Acknowledge fixed issues from previous reviews
 4. Only comment on new issues or unresolved previous issues
 5. Consider the cumulative impact of changes
+6. IMPORTANT: Only use line numbers that appear in the current "diff" field
 `;
 
 export default baseCodeReviewPrompt;
