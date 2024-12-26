@@ -51,11 +51,12 @@ jobs:
           AI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           AI_MODEL: "gpt-4o-mini"
 
-          # Optional configurations (currently not used)
-          # REVIEW_MAX_COMMENTS: 10
-          # EXCLUDE_PATTERNS: "**/*.md,**/*.json"
-          # APPROVE_REVIEWS: false
-          # REVIEW_PROJECT_CONTEXT: "This is a Node.js TypeScript project"
+          # Optional configurations
+          APPROVE_REVIEWS: true
+          MAX_COMMENTS: 10 # 0 to disable
+          PROJECT_CONTEXT: "This is a Node.js TypeScript project"
+          CONTEXT_FILES: "package.json,README.md"
+          EXCLUDE_PATTERNS: "**/*.md,**/*.json"
 ```
 
 ## Configuration
@@ -65,10 +66,11 @@ jobs:
 | `AI_PROVIDER` | AI provider to use (`openai`, `anthropic`, `google`) | `openai` |
 | `AI_API_KEY` | API key for chosen provider | Required |
 | `AI_MODEL` | Model to use (see supported models below) | Provider's default |
-| `REVIEW_MAX_COMMENTS` | Maximum number of review comments | `10` |
+| `APPROVE_REVIEWS` | Whether to approve PRs automatically | `true` |
+| `MAX_COMMENTS` | Maximum number of review comments | `0` |
+| `PROJECT_CONTEXT` | Project context for better reviews | `""` |
+| `CONTEXT_FILES` | Files to include in review (comma-separated) | `"package.json,README.md"` |
 | `EXCLUDE_PATTERNS` | Files to exclude (glob patterns, comma-separated) | `""` |
-| `APPROVE_REVIEWS` | Whether to approve PRs automatically | `false` |
-| `REVIEW_PROJECT_CONTEXT` | Project context for better reviews | `""` |
 
 ### Supported Models
 

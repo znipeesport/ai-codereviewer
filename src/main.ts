@@ -15,7 +15,14 @@ async function main() {
     const apiKey = core.getInput('AI_API_KEY');
     const githubToken = core.getInput('GITHUB_TOKEN');
 
-    // Initialize AI provider
+    // Get new configuration inputs
+    const approveReviews = core.getBooleanInput('APPROVE_REVIEWS');
+    const maxComments = parseInt(core.getInput('MAX_COMMENTS') || '0', 10);
+    const projectContext = core.getInput('PROJECT_CONTEXT');
+    const contextFiles = core.getInput('CONTEXT_FILES').split(',').map(f => f.trim());
+    const excludePatterns = core.getInput('EXCLUDE_PATTERNS');
+
+    // Initialize services
     const aiProvider = getProvider(provider);
     await aiProvider.initialize({
       apiKey,
@@ -25,11 +32,17 @@ async function main() {
 
     // Initialize services
     const githubService = new GitHubService(githubToken);
-    const diffService = new DiffService(githubToken);
+    const diffService = new DiffService(githubToken, excludePatterns);
     const reviewService = new ReviewService(
       aiProvider,
       githubService,
       diffService,
+      {
+        maxComments,
+        approveReviews,
+        projectContext,
+        contextFiles
+      }
     );
 
     // Get PR number from GitHub context

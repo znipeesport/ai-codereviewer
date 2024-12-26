@@ -15,13 +15,21 @@ inputs:
   AI_API_KEY:
     description: "API key for the chosen AI provider"
     required: true
-  REVIEW_BEHAVIOR:
-    description: "Review behavior (suggest_approval, comment_only, full_review)"
+  APPROVE_REVIEWS:
+    description: "Whether to approve/reject PRs automatically"
     required: false
-    default: "full_review"
+    default: "true"
+  MAX_COMMENTS:
+    description: "Maximum number of review comments"
+    required: false
+    default: "0"
   PROJECT_CONTEXT:
     description: "Additional context about the project"
     required: false
+  CONTEXT_FILES:
+    description: "Files to include in review (comma-separated)"
+    required: false
+    default: "package.json,README.md"
   EXCLUDE_PATTERNS:
     description: "Files to exclude (glob patterns)"
     required: false

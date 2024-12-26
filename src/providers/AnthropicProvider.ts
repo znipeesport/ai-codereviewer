@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { AIProvider, AIProviderConfig, ReviewRequest, ReviewResponse } from './AIProvider';
 import * as core from '@actions/core';
-import { baseCodeReviewPrompt } from '../prompts';
+import { baseCodeReviewPrompt, updateReviewPrompt } from '../prompts';
 import { TextBlock } from '@anthropic-ai/sdk/resources';
 
 export class AnthropicProvider implements AIProvider {
@@ -16,17 +16,16 @@ export class AnthropicProvider implements AIProvider {
   }
 
   async review(request: ReviewRequest): Promise<ReviewResponse> {
-    const prompt = this.buildPrompt(request);
-    core.info(`Sending request to Anthropic with prompt structure: ${JSON.stringify(request, null, 2)}`);
+    core.debug(`Sending request to Anthropic with prompt structure: ${JSON.stringify(request, null, 2)}`);
 
     const response = await this.client.messages.create({
       model: this.config.model,
       max_tokens: 4000,
-      system: baseCodeReviewPrompt,
+      system: this.buildSystemPrompt(request),
       messages: [
         {
           role: 'user',
-          content: prompt,
+          content: this.buildPullRequestPrompt(request),
         },
         {
           role: 'user',
@@ -36,7 +35,7 @@ export class AnthropicProvider implements AIProvider {
       temperature: this.config.temperature ?? 0.3,
     });
 
-    core.info(`Raw Anthropic response: ${JSON.stringify((response.content[0] as TextBlock).text, null, 2)}`);
+    core.debug(`Raw Anthropic response: ${JSON.stringify((response.content[0] as TextBlock).text, null, 2)}`);
 
     const parsedResponse = this.parseResponse(response);
     core.info(`Parsed response: ${JSON.stringify(parsedResponse, null, 2)}`);
@@ -44,13 +43,29 @@ export class AnthropicProvider implements AIProvider {
     return parsedResponse;
   }
 
-  private buildPrompt(request: ReviewRequest): string {
+  private buildPullRequestPrompt(request: ReviewRequest): string {
     return JSON.stringify({
       type: 'code_review',
       files: request.files,
       pr: request.pullRequest,
       context: request.context,
+      previousReviews: request.previousReviews?.map(review => ({
+        summary: review.summary,
+        lineComments: review.lineComments.map(comment => ({
+          path: comment.path,
+          line: comment.line,
+          comment: comment.comment
+        }))
+      }))
     });
+  }
+
+  private buildSystemPrompt(request: ReviewRequest): string {
+    const isUpdate = request.context.isUpdate;
+    return `
+      ${baseCodeReviewPrompt}
+      ${isUpdate ? updateReviewPrompt : ''}
+    `;
   }
 
   private parseResponse(response: Anthropic.Message): ReviewResponse {
