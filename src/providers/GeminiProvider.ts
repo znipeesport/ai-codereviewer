@@ -1,7 +1,7 @@
 import { GenerativeModel, GoogleGenerativeAI } from '@google/generative-ai';
 import { AIProvider, AIProviderConfig, ReviewRequest, ReviewResponse } from './AIProvider';
 import * as core from '@actions/core';
-import { baseCodeReviewPrompt } from '../prompts';
+import { baseCodeReviewPrompt, updateReviewPrompt } from '../prompts';
 
 export class GeminiProvider implements AIProvider {
   private config!: AIProviderConfig;
@@ -20,17 +20,16 @@ export class GeminiProvider implements AIProvider {
   }
 
   async review(request: ReviewRequest): Promise<ReviewResponse> {
-    const prompt = this.buildPrompt(request);
     core.debug(`Sending request to Gemini with prompt structure: ${JSON.stringify(request, null, 2)}`);
 
     const result = await this.model.generateContent({
-      systemInstruction: baseCodeReviewPrompt,
+      systemInstruction: this.buildSystemPrompt(request),
       contents: [
         {
           role: 'user',
           parts: [
             {
-              text: prompt,
+              text: this.buildPullRequestPrompt(request),
             }
           ]
         }
@@ -38,18 +37,37 @@ export class GeminiProvider implements AIProvider {
     });
 
     const response = result.response;
-    core.info(`Raw Gemini response: ${JSON.stringify(response.text(), null, 2)}`);
+    core.debug(`Raw Gemini response: ${JSON.stringify(response.text(), null, 2)}`);
 
-    return this.parseResponse(response);
+    const parsedResponse = this.parseResponse(response);
+    core.info(`Parsed response: ${JSON.stringify(parsedResponse, null, 2)}`);
+
+    return parsedResponse;
   }
 
-  private buildPrompt(request: ReviewRequest): string {
+  private buildPullRequestPrompt(request: ReviewRequest): string {
     return JSON.stringify({
       type: 'code_review',
       files: request.files,
       pr: request.pullRequest,
       context: request.context,
+      previousReviews: request.previousReviews?.map(review => ({
+        summary: review.summary,
+        lineComments: review.lineComments.map(comment => ({
+          path: comment.path,
+          line: comment.line,
+          comment: comment.comment
+        }))
+      }))
     });
+  }
+
+  private buildSystemPrompt(request: ReviewRequest): string {
+    const isUpdate = request.context.isUpdate;
+    return `
+      ${baseCodeReviewPrompt}
+      ${isUpdate ? updateReviewPrompt : ''}
+    `;
   }
 
   private parseResponse(response: any): ReviewResponse {

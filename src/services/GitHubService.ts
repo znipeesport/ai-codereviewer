@@ -160,4 +160,48 @@ export class GitHubService {
 
     return lastCommit?.sha || null;
   }
+
+  async getPreviousReviews(prNumber: number): Promise<Array<{
+    commit: string | null;
+    summary: string;
+    lineComments: Array<{
+      path: string;
+      line: number;
+      comment: string;
+    }>;
+  }>> {
+    const { data: reviews } = await this.octokit.pulls.listReviews({
+      owner: this.owner,
+      repo: this.repo,
+      pull_number: prNumber,
+    });
+
+    // Filter to bot reviews and fetch their comments
+    const botReviews =reviews.filter(review => review.user?.login === 'github-actions[bot]');
+
+    core.debug(`Found ${botReviews.length} bot reviews`);
+
+    const botReviewsWithComments = await Promise.all(
+      botReviews.map(async review => {
+        const { data: comments } = await this.octokit.pulls.listReviewComments({
+          owner: this.owner,
+          repo: this.repo,
+          pull_number: prNumber,
+          review_id: review.id
+          });
+
+          return {
+            commit: review.commit_id,
+            summary: review.body || '',
+            lineComments: comments.map(comment => ({
+              path: comment.path,
+              line: comment.line || 0,
+              comment: comment.body
+            }))
+          };
+        })
+    );
+
+    return botReviewsWithComments;
+  }
 }

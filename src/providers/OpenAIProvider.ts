@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import { AIProvider, AIProviderConfig, ReviewRequest, ReviewResponse } from './AIProvider';
 import * as core from '@actions/core';
-import { baseCodeReviewPrompt } from '../prompts';
+import { baseCodeReviewPrompt, updateReviewPrompt } from '../prompts';
 
 export class OpenAIProvider implements AIProvider {
   private config!: AIProviderConfig;
@@ -13,7 +13,6 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async review(request: ReviewRequest): Promise<ReviewResponse> {
-    const prompt = this.buildPrompt(request);
     core.debug(`Sending request to OpenAI with prompt structure: ${JSON.stringify(request, null, 2)}`);
 
     const response = await this.client.chat.completions.create({
@@ -21,11 +20,11 @@ export class OpenAIProvider implements AIProvider {
       messages: [
         {
           role: 'system',
-          content: baseCodeReviewPrompt,
+          content: this.buildSystemPrompt(request),
         },
         {
           role: 'user',
-          content: prompt,
+          content: this.buildPullRequestPrompt(request),
         },
       ],
       temperature: this.config.temperature ?? 0.3,
@@ -40,13 +39,29 @@ export class OpenAIProvider implements AIProvider {
     return parsedResponse;
   }
 
-  private buildPrompt(request: ReviewRequest): string {
+  private buildPullRequestPrompt(request: ReviewRequest): string {
     return JSON.stringify({
       type: 'code_review',
       files: request.files,
       pr: request.pullRequest,
       context: request.context,
+      previousReviews: request.previousReviews?.map(review => ({
+        summary: review.summary,
+        lineComments: review.lineComments.map(comment => ({
+          path: comment.path,
+          line: comment.line,
+          comment: comment.comment
+        }))
+      }))
     });
+  }
+
+  private buildSystemPrompt(request: ReviewRequest): string {
+    const isUpdate = request.context.isUpdate;
+    return `
+      ${baseCodeReviewPrompt}
+      ${isUpdate ? updateReviewPrompt : ''}
+    `;
   }
 
   private parseResponse(response: OpenAI.Chat.Completions.ChatCompletion): ReviewResponse {

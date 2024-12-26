@@ -17,7 +17,7 @@ export interface ReviewRequest {
     content: string;
   }>;
   previousReviews?: Array<{
-    commit: string;
+    commit: string | null;
     summary: string;
     lineComments: Array<{
       path: string;
@@ -36,6 +36,7 @@ export interface ReviewRequest {
     repository: string;
     owner: string;
     projectContext?: string;
+    isUpdate?: boolean;
   };
 }
 

@@ -22,6 +22,13 @@ export class ReviewService {
     const lastReviewedCommit = await this.githubService.getLastReviewedCommit(prNumber);
     const isUpdate = !!lastReviewedCommit;
 
+    // If this is an update, get previous reviews
+    let previousReviews;
+    if (isUpdate) {
+      previousReviews = await this.githubService.getPreviousReviews(prNumber);
+      core.debug(`Found ${previousReviews.length} previous reviews`);
+    }
+
     const modifiedFiles = await this.diffService.getRelevantFiles(prDetails, lastReviewedCommit);
     core.info(`Modified files length: ${modifiedFiles.length}`);
 
@@ -51,6 +58,7 @@ export class ReviewService {
     const review = await this.aiProvider.review({
       files: filesWithContent,
       contextFiles,
+      previousReviews,
       pullRequest: {
         title: prDetails.title,
         description: prDetails.description,
@@ -61,6 +69,7 @@ export class ReviewService {
         repository: process.env.GITHUB_REPOSITORY ?? '',
         owner: process.env.GITHUB_REPOSITORY_OWNER ?? '',
         projectContext: process.env.INPUT_PROJECT_CONTEXT,
+        isUpdate,
       },
     });
 

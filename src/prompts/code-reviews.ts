@@ -52,7 +52,7 @@ For the "suggestedAction" field, provide a single word that indicates the action
 For the "confidence" field, provide a number between 0 and 100 that indicates the confidence in the verdict.
 `;
 
-const updateReviewPrompt = `
+export const updateReviewPrompt = `
 When reviewing updates to a PR:
 1. Focus on the modified sections but consider their context
 2. Reference previous comments if they're still relevant
