@@ -126,10 +126,15 @@ export class DiffService {
       }
     }
 
-    return this.formatRelevantSections(lines, relevantSections);
+    // Add line numbers to the output
+    return this.formatRelevantSections(lines, relevantSections, true);
   }
 
-  private formatRelevantSections(lines: string[], sections: Array<{ start: number; end: number }>): string {
+  private formatRelevantSections(
+    lines: string[], 
+    sections: Array<{ start: number; end: number }>,
+    includeLineNumbers: boolean = false
+  ): string {
     const result: string[] = [];
     let lastEnd = 0;
 
@@ -137,7 +142,12 @@ export class DiffService {
       if (section.start > lastEnd) {
         result.push('// ... skipped unchanged code ...');
       }
-      result.push(...lines.slice(section.start, section.end));
+      // Add line numbers as comments
+      for (let i = section.start; i < section.end; i++) {
+        const lineNum = i + 1; // Convert to 1-based line numbers
+        const line = lines[i];
+        result.push(includeLineNumbers ? `/* ${lineNum} */ ${line}` : line);
+      }
       lastEnd = section.end;
     }
 

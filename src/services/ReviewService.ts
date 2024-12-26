@@ -41,11 +41,10 @@ export class ReviewService {
           content: isUpdate ? this.diffService.extractRelevantContext(fullContent, file.diff) : fullContent,
           originalContent: await this.githubService.getFileContent(file.path, prDetails.base),
           diff: file.diff,
-          // Add metadata about the changes
           changeContext: isUpdate ? {
             previouslyReviewed: true,
             modifiedLines: this.diffService.getModifiedLines(file.diff),
-            surroundingContext: true  // Flag indicating we're including some context
+            surroundingContext: true
           } : undefined
         };
       })

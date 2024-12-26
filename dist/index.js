@@ -727,16 +727,22 @@ class DiffService {
                 relevantSections.push({ start, end });
             }
         }
-        return this.formatRelevantSections(lines, relevantSections);
+        // Add line numbers to the output
+        return this.formatRelevantSections(lines, relevantSections, true);
     }
-    formatRelevantSections(lines, sections) {
+    formatRelevantSections(lines, sections, includeLineNumbers = false) {
         const result = [];
         let lastEnd = 0;
         for (const section of sections) {
             if (section.start > lastEnd) {
                 result.push('// ... skipped unchanged code ...');
             }
-            result.push(...lines.slice(section.start, section.end));
+            // Add line numbers as comments
+            for (let i = section.start; i < section.end; i++) {
+                const lineNum = i + 1; // Convert to 1-based line numbers
+                const line = lines[i];
+                result.push(includeLineNumbers ? `/* ${lineNum} */ ${line}` : line);
+            }
             lastEnd = section.end;
         }
         if (lastEnd < lines.length) {
@@ -1029,11 +1035,10 @@ class ReviewService {
                 content: isUpdate ? this.diffService.extractRelevantContext(fullContent, file.diff) : fullContent,
                 originalContent: await this.githubService.getFileContent(file.path, prDetails.base),
                 diff: file.diff,
-                // Add metadata about the changes
                 changeContext: isUpdate ? {
                     previouslyReviewed: true,
                     modifiedLines: this.diffService.getModifiedLines(file.diff),
-                    surroundingContext: true // Flag indicating we're including some context
+                    surroundingContext: true
                 } : undefined
             };
         }));
