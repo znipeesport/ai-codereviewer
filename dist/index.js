@@ -684,72 +684,6 @@ class DiffService {
         })
             .join('\n');
     }
-    getModifiedLines(diff) {
-        const files = (0, parse_diff_1.default)(diff);
-        const modifiedLines = [];
-        for (const file of files) {
-            for (const chunk of file.chunks) {
-                let currentLine = chunk.newStart;
-                let currentBlock = null;
-                for (const change of chunk.changes) {
-                    if (change.type === 'add' || change.type === 'normal') {
-                        if (change.type === 'add') {
-                            if (!currentBlock) {
-                                currentBlock = { start: currentLine, end: currentLine + 1 };
-                                modifiedLines.push(currentBlock);
-                            }
-                            else {
-                                currentBlock.end = currentLine + 1;
-                            }
-                        }
-                        else if (change.type === 'normal' && currentBlock) {
-                            currentBlock = null;
-                        }
-                        currentLine++;
-                    }
-                }
-            }
-        }
-        return modifiedLines;
-    }
-    extractRelevantContext(fullContent, diff, contextLines = 10) {
-        const modifiedLines = this.getModifiedLines(diff);
-        const lines = fullContent.split('\n');
-        const relevantSections = [];
-        // Merge nearby sections
-        for (const block of modifiedLines) {
-            const start = Math.max(0, block.start - contextLines);
-            const end = Math.min(lines.length, block.end + contextLines);
-            if (relevantSections.length > 0 && start <= relevantSections[relevantSections.length - 1].end) {
-                relevantSections[relevantSections.length - 1].end = end;
-            }
-            else {
-                relevantSections.push({ start, end });
-            }
-        }
-        // Add line numbers to the output
-        return this.formatRelevantSections(lines, relevantSections, true);
-    }
-    formatRelevantSections(lines, sections, includeLineNumbers = false) {
-        const result = [];
-        let lastEnd = 0;
-        for (const section of sections) {
-            if (section.start > lastEnd) {
-                result.push('// ... skipped unchanged code ...');
-            }
-            // Add line numbers as comments
-            for (let i = section.start; i < section.end; i++) {
-                const lineNum = i + 1; // Convert to 1-based line numbers
-                const line = lines[i];
-                result.push(includeLineNumbers ? `/* ${lineNum} */ ${line}` : line);
-            }
-            lastEnd = section.end;
-        }
-        if (lastEnd < lines.length) {
-            result.push('// ... skipped unchanged code ...');
-        }
-        return result.join('\n');
-    }
 }
 exports.DiffService = DiffService;
 
@@ -1032,14 +966,9 @@ class ReviewService {
             const fullContent = await this.githubService.getFileContent(file.path, prDetails.head);
             return {
                 path: file.path,
-                content: isUpdate ? this.diffService.extractRelevantContext(fullContent, file.diff) : fullContent,
+                content: fullContent,
                 originalContent: await this.githubService.getFileContent(file.path, prDetails.base),
                 diff: file.diff,
-                changeContext: isUpdate ? {
-                    previouslyReviewed: true,
-                    modifiedLines: this.diffService.getModifiedLines(file.diff),
-                    surroundingContext: true
-                } : undefined
             };
         }));
         // Get repository context (package.json, readme, etc)

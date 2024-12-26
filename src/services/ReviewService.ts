@@ -38,14 +38,9 @@ export class ReviewService {
         const fullContent = await this.githubService.getFileContent(file.path, prDetails.head);
         return {
           path: file.path,
-          content: isUpdate ? this.diffService.extractRelevantContext(fullContent, file.diff) : fullContent,
+          content: fullContent,
           originalContent: await this.githubService.getFileContent(file.path, prDetails.base),
           diff: file.diff,
-          changeContext: isUpdate ? {
-            previouslyReviewed: true,
-            modifiedLines: this.diffService.getModifiedLines(file.diff),
-            surroundingContext: true
-          } : undefined
         };
       })
     );
