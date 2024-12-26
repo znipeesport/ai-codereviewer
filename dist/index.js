@@ -118,7 +118,7 @@ main().catch(error => {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.baseCodeReviewPrompt = exports.outputFormat = void 0;
+exports.updateReviewPrompt = exports.baseCodeReviewPrompt = exports.outputFormat = void 0;
 exports.outputFormat = `
 {
   "summary": "",
@@ -170,6 +170,14 @@ For the "suggestedAction" field, provide a single word that indicates the action
 - "comment"
 
 For the "confidence" field, provide a number between 0 and 100 that indicates the confidence in the verdict.
+`;
+exports.updateReviewPrompt = `
+When reviewing updates to a PR:
+1. Focus on the modified sections but consider their context
+2. Reference previous comments if they're still relevant
+3. Acknowledge fixed issues from previous reviews
+4. Only comment on new issues or unresolved previous issues
+5. Consider the cumulative impact of changes
 `;
 exports["default"] = exports.baseCodeReviewPrompt;
 
@@ -256,16 +264,15 @@ class AnthropicProvider {
     }
     async review(request) {
         var _a;
-        const prompt = this.buildPrompt(request);
-        core.info(`Sending request to Anthropic with prompt structure: ${JSON.stringify(request, null, 2)}`);
+        core.debug(`Sending request to Anthropic with prompt structure: ${JSON.stringify(request, null, 2)}`);
         const response = await this.client.messages.create({
             model: this.config.model,
             max_tokens: 4000,
-            system: prompts_1.baseCodeReviewPrompt,
+            system: this.buildSystemPrompt(request),
             messages: [
                 {
                     role: 'user',
-                    content: prompt,
+                    content: this.buildPullRequestPrompt(request),
                 },
                 {
                     role: 'user',
@@ -274,18 +281,34 @@ class AnthropicProvider {
             ],
             temperature: (_a = this.config.temperature) !== null && _a !== void 0 ? _a : 0.3,
         });
-        core.info(`Raw Anthropic response: ${JSON.stringify(response.content[0].text, null, 2)}`);
+        core.debug(`Raw Anthropic response: ${JSON.stringify(response.content[0].text, null, 2)}`);
         const parsedResponse = this.parseResponse(response);
         core.info(`Parsed response: ${JSON.stringify(parsedResponse, null, 2)}`);
         return parsedResponse;
     }
-    buildPrompt(request) {
+    buildPullRequestPrompt(request) {
+        var _a;
         return JSON.stringify({
             type: 'code_review',
             files: request.files,
             pr: request.pullRequest,
             context: request.context,
+            previousReviews: (_a = request.previousReviews) === null || _a === void 0 ? void 0 : _a.map(review => ({
+                summary: review.summary,
+                lineComments: review.lineComments.map(comment => ({
+                    path: comment.path,
+                    line: comment.line,
+                    comment: comment.comment
+                }))
+            }))
         });
+    }
+    buildSystemPrompt(request) {
+        const isUpdate = request.context.isUpdate;
+        return `
+      ${prompts_1.baseCodeReviewPrompt}
+      ${isUpdate ? prompts_1.updateReviewPrompt : ''}
+    `;
     }
     parseResponse(response) {
         try {
@@ -368,32 +391,49 @@ class GeminiProvider {
         });
     }
     async review(request) {
-        const prompt = this.buildPrompt(request);
-        core.info(`Sending request to Gemini with prompt structure: ${JSON.stringify(request, null, 2)}`);
+        core.debug(`Sending request to Gemini with prompt structure: ${JSON.stringify(request, null, 2)}`);
         const result = await this.model.generateContent({
-            systemInstruction: prompts_1.baseCodeReviewPrompt,
+            systemInstruction: this.buildSystemPrompt(request),
             contents: [
                 {
                     role: 'user',
                     parts: [
                         {
-                            text: prompt,
+                            text: this.buildPullRequestPrompt(request),
                         }
                     ]
                 }
             ]
         });
         const response = result.response;
-        core.info(`Raw Gemini response: ${JSON.stringify(response.text(), null, 2)}`);
-        return this.parseResponse(response);
+        core.debug(`Raw Gemini response: ${JSON.stringify(response.text(), null, 2)}`);
+        const parsedResponse = this.parseResponse(response);
+        core.info(`Parsed response: ${JSON.stringify(parsedResponse, null, 2)}`);
+        return parsedResponse;
     }
-    buildPrompt(request) {
+    buildPullRequestPrompt(request) {
+        var _a;
         return JSON.stringify({
             type: 'code_review',
             files: request.files,
             pr: request.pullRequest,
             context: request.context,
+            previousReviews: (_a = request.previousReviews) === null || _a === void 0 ? void 0 : _a.map(review => ({
+                summary: review.summary,
+                lineComments: review.lineComments.map(comment => ({
+                    path: comment.path,
+                    line: comment.line,
+                    comment: comment.comment
+                }))
+            }))
         });
+    }
+    buildSystemPrompt(request) {
+        const isUpdate = request.context.isUpdate;
+        return `
+      ${prompts_1.baseCodeReviewPrompt}
+      ${isUpdate ? prompts_1.updateReviewPrompt : ''}
+    `;
     }
     parseResponse(response) {
         try {
@@ -474,35 +514,50 @@ class OpenAIProvider {
     }
     async review(request) {
         var _a;
-        const prompt = this.buildPrompt(request);
-        core.info(`Sending request to OpenAI with prompt structure: ${JSON.stringify(request, null, 2)}`);
+        core.debug(`Sending request to OpenAI with prompt structure: ${JSON.stringify(request, null, 2)}`);
         const response = await this.client.chat.completions.create({
             model: this.config.model,
             messages: [
                 {
                     role: 'system',
-                    content: prompts_1.baseCodeReviewPrompt,
+                    content: this.buildSystemPrompt(request),
                 },
                 {
                     role: 'user',
-                    content: prompt,
+                    content: this.buildPullRequestPrompt(request),
                 },
             ],
             temperature: (_a = this.config.temperature) !== null && _a !== void 0 ? _a : 0.3,
             response_format: { type: 'json_object' },
         });
-        core.info(`Raw OpenAI response: ${JSON.stringify(response.choices[0].message.content, null, 2)}`);
+        core.debug(`Raw OpenAI response: ${JSON.stringify(response.choices[0].message.content, null, 2)}`);
         const parsedResponse = this.parseResponse(response);
         core.info(`Parsed response: ${JSON.stringify(parsedResponse, null, 2)}`);
         return parsedResponse;
     }
-    buildPrompt(request) {
+    buildPullRequestPrompt(request) {
+        var _a;
         return JSON.stringify({
             type: 'code_review',
             files: request.files,
             pr: request.pullRequest,
             context: request.context,
+            previousReviews: (_a = request.previousReviews) === null || _a === void 0 ? void 0 : _a.map(review => ({
+                summary: review.summary,
+                lineComments: review.lineComments.map(comment => ({
+                    path: comment.path,
+                    line: comment.line,
+                    comment: comment.comment
+                }))
+            }))
         });
+    }
+    buildSystemPrompt(request) {
+        const isUpdate = request.context.isUpdate;
+        return `
+      ${prompts_1.baseCodeReviewPrompt}
+      ${isUpdate ? prompts_1.updateReviewPrompt : ''}
+    `;
     }
     parseResponse(response) {
         var _a;
@@ -625,6 +680,66 @@ class DiffService {
             return `@@ ${chunk.content} @@\n${changes}`;
         })
             .join('\n');
+    }
+    getModifiedLines(diff) {
+        const files = (0, parse_diff_1.default)(diff);
+        const modifiedLines = [];
+        for (const file of files) {
+            for (const chunk of file.chunks) {
+                let currentLine = chunk.newStart;
+                let currentBlock = null;
+                for (const change of chunk.changes) {
+                    if (change.type === 'add' || change.type === 'normal') {
+                        if (change.type === 'add') {
+                            if (!currentBlock) {
+                                currentBlock = { start: currentLine, end: currentLine + 1 };
+                                modifiedLines.push(currentBlock);
+                            }
+                            else {
+                                currentBlock.end = currentLine + 1;
+                            }
+                        }
+                        else if (change.type === 'normal' && currentBlock) {
+                            currentBlock = null;
+                        }
+                        currentLine++;
+                    }
+                }
+            }
+        }
+        return modifiedLines;
+    }
+    extractRelevantContext(fullContent, diff, contextLines = 10) {
+        const modifiedLines = this.getModifiedLines(diff);
+        const lines = fullContent.split('\n');
+        const relevantSections = [];
+        // Merge nearby sections
+        for (const block of modifiedLines) {
+            const start = Math.max(0, block.start - contextLines);
+            const end = Math.min(lines.length, block.end + contextLines);
+            if (relevantSections.length > 0 && start <= relevantSections[relevantSections.length - 1].end) {
+                relevantSections[relevantSections.length - 1].end = end;
+            }
+            else {
+                relevantSections.push({ start, end });
+            }
+        }
+        return this.formatRelevantSections(lines, relevantSections);
+    }
+    formatRelevantSections(lines, sections) {
+        const result = [];
+        let lastEnd = 0;
+        for (const section of sections) {
+            if (section.start > lastEnd) {
+                result.push('// ... skipped unchanged code ...');
+            }
+            result.push(...lines.slice(section.start, section.end));
+            lastEnd = section.end;
+        }
+        if (lastEnd < lines.length) {
+            result.push('// ... skipped unchanged code ...');
+        }
+        return result.join('\n');
     }
 }
 exports.DiffService = DiffService;
@@ -805,6 +920,34 @@ class GitHubService {
         });
         return (lastCommit === null || lastCommit === void 0 ? void 0 : lastCommit.sha) || null;
     }
+    async getPreviousReviews(prNumber) {
+        const { data: reviews } = await this.octokit.pulls.listReviews({
+            owner: this.owner,
+            repo: this.repo,
+            pull_number: prNumber,
+        });
+        // Filter to bot reviews and fetch their comments
+        const botReviews = reviews.filter(review => { var _a; return ((_a = review.user) === null || _a === void 0 ? void 0 : _a.login) === 'github-actions[bot]'; });
+        core.debug(`Found ${botReviews.length} bot reviews`);
+        const botReviewsWithComments = await Promise.all(botReviews.map(async (review) => {
+            const { data: comments } = await this.octokit.pulls.listReviewComments({
+                owner: this.owner,
+                repo: this.repo,
+                pull_number: prNumber,
+                review_id: review.id
+            });
+            return {
+                commit: review.commit_id,
+                summary: review.body || '',
+                lineComments: comments.map(comment => ({
+                    path: comment.path,
+                    line: comment.line || 0,
+                    comment: comment.body
+                }))
+            };
+        }));
+        return botReviewsWithComments;
+    }
 }
 exports.GitHubService = GitHubService;
 
@@ -865,21 +1008,39 @@ class ReviewService {
         const prDetails = await this.githubService.getPRDetails(prNumber);
         core.info(`PR title: ${prDetails.title}`);
         // Get modified files from diff
-        const modifiedFiles = await this.diffService.getRelevantFiles(prDetails);
+        const lastReviewedCommit = await this.githubService.getLastReviewedCommit(prNumber);
+        const isUpdate = !!lastReviewedCommit;
+        // If this is an update, get previous reviews
+        let previousReviews;
+        if (isUpdate) {
+            previousReviews = await this.githubService.getPreviousReviews(prNumber);
+            core.debug(`Found ${previousReviews.length} previous reviews`);
+        }
+        const modifiedFiles = await this.diffService.getRelevantFiles(prDetails, lastReviewedCommit);
         core.info(`Modified files length: ${modifiedFiles.length}`);
         // Get full content for each modified file
-        const filesWithContent = await Promise.all(modifiedFiles.map(async (file) => ({
-            path: file.path,
-            content: await this.githubService.getFileContent(file.path, prDetails.head),
-            originalContent: await this.githubService.getFileContent(file.path, prDetails.base),
-            diff: file.diff,
-        })));
+        const filesWithContent = await Promise.all(modifiedFiles.map(async (file) => {
+            const fullContent = await this.githubService.getFileContent(file.path, prDetails.head);
+            return {
+                path: file.path,
+                content: isUpdate ? this.diffService.extractRelevantContext(fullContent, file.diff) : fullContent,
+                originalContent: await this.githubService.getFileContent(file.path, prDetails.base),
+                diff: file.diff,
+                // Add metadata about the changes
+                changeContext: isUpdate ? {
+                    previouslyReviewed: true,
+                    modifiedLines: this.diffService.getModifiedLines(file.diff),
+                    surroundingContext: true // Flag indicating we're including some context
+                } : undefined
+            };
+        }));
         // Get repository context (package.json, readme, etc)
         const contextFiles = await this.getRepositoryContext();
         // Perform AI review
         const review = await this.aiProvider.review({
             files: filesWithContent,
             contextFiles,
+            previousReviews,
             pullRequest: {
                 title: prDetails.title,
                 description: prDetails.description,
@@ -890,6 +1051,7 @@ class ReviewService {
                 repository: (_a = process.env.GITHUB_REPOSITORY) !== null && _a !== void 0 ? _a : '',
                 owner: (_b = process.env.GITHUB_REPOSITORY_OWNER) !== null && _b !== void 0 ? _b : '',
                 projectContext: process.env.INPUT_PROJECT_CONTEXT,
+                isUpdate,
             },
         });
         // Add model name to summary
