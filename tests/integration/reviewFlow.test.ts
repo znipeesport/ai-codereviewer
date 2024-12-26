@@ -43,7 +43,13 @@ jest.mock('@octokit/rest', () => ({
           id: 123,
           body: 'Test review'
         }
-      })
+      }),
+      listReviews: jest.fn().mockResolvedValue({
+        data: []
+      }),
+      listReviewComments: jest.fn().mockResolvedValue({
+        data: []
+      }),
     },
     repos: {
       getContent: jest.fn().mockResolvedValue({
@@ -63,7 +69,7 @@ describe('Pull Request Review Flow', () => {
 
   it('should perform a complete review flow', async () => {
     const githubService = new GitHubService('mock-token');
-    const diffService = new DiffService();
+    const diffService = new DiffService('mock-token');
     const aiProvider = new OpenAIProvider();
     const reviewService = new ReviewService(aiProvider, githubService, diffService);
 
