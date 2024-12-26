@@ -56,7 +56,13 @@ async function main() {
         const model = core.getInput('AI_MODEL');
         const apiKey = core.getInput('AI_API_KEY');
         const githubToken = core.getInput('GITHUB_TOKEN');
-        // Initialize AI provider
+        // Get new configuration inputs
+        const approveReviews = core.getBooleanInput('APPROVE_REVIEWS');
+        const maxComments = parseInt(core.getInput('MAX_COMMENTS') || '0', 10);
+        const projectContext = core.getInput('PROJECT_CONTEXT');
+        const contextFiles = core.getInput('CONTEXT_FILES').split(',').map(f => f.trim());
+        const excludePatterns = core.getInput('EXCLUDE_PATTERNS');
+        // Initialize services
         const aiProvider = getProvider(provider);
         await aiProvider.initialize({
             apiKey,
@@ -65,8 +71,13 @@ async function main() {
         });
         // Initialize services
         const githubService = new GitHubService_1.GitHubService(githubToken);
-        const diffService = new DiffService_1.DiffService(githubToken);
-        const reviewService = new ReviewService_1.ReviewService(aiProvider, githubService, diffService);
+        const diffService = new DiffService_1.DiffService(githubToken, excludePatterns);
+        const reviewService = new ReviewService_1.ReviewService(aiProvider, githubService, diffService, {
+            maxComments,
+            approveReviews,
+            projectContext,
+            contextFiles
+        });
         // Get PR number from GitHub context
         const prNumber = getPRNumberFromContext();
         // Perform review
@@ -632,9 +643,9 @@ const parse_diff_1 = __importDefault(__nccwpck_require__(2673));
 const minimatch_1 = __nccwpck_require__(6507);
 const core = __importStar(__nccwpck_require__(7484));
 class DiffService {
-    constructor(githubToken) {
+    constructor(githubToken, excludePatterns) {
         this.githubToken = githubToken;
-        this.excludePatterns = core.getInput('EXCLUDE_PATTERNS')
+        this.excludePatterns = excludePatterns
             .split(',')
             .map(p => p.trim());
     }
@@ -785,15 +796,22 @@ class GitHubService {
     async submitReview(prNumber, review) {
         const { summary, lineComments = [], suggestedAction } = review;
         // Convert line comments to GitHub review comments format
-        const comments = await Promise.all(lineComments.map(async (comment) => {
-            // Get the position in the diff for this line
-            const position = await this.getDiffPosition(prNumber, comment.path, comment.line);
-            return {
-                path: comment.path,
-                position, // Use diff position instead of line number
-                body: comment.comment
-            };
+        const allComments = await Promise.all(lineComments.map(async (comment) => {
+            try {
+                // Get the position in the diff for this line
+                const position = await this.getDiffPosition(prNumber, comment.path, comment.line);
+                return {
+                    path: comment.path,
+                    position, // Use diff position instead of line number
+                    body: comment.comment
+                };
+            }
+            catch (error) {
+                core.warning(`Failed to get diff position for ${comment.path}: ${error}`);
+                return null;
+            }
         }));
+        const comments = allComments.filter(comment => comment !== null);
         core.info(`Submitting review with comments: ${JSON.stringify(comments, null, 2)}`);
         await this.octokit.pulls.createReview({
             owner: this.owner,
@@ -948,13 +966,19 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.ReviewService = void 0;
 const core = __importStar(__nccwpck_require__(7484));
 class ReviewService {
-    constructor(aiProvider, githubService, diffService) {
+    constructor(aiProvider, githubService, diffService, config) {
         this.aiProvider = aiProvider;
         this.githubService = githubService;
         this.diffService = diffService;
+        this.config = {
+            maxComments: config.maxComments || 0,
+            approveReviews: config.approveReviews,
+            projectContext: config.projectContext,
+            contextFiles: config.contextFiles || ['package.json', 'README.md']
+        };
     }
     async performReview(prNumber) {
-        var _a, _b, _c;
+        var _a, _b, _c, _d;
         core.info(`Starting review for PR #${prNumber}`);
         // Get PR details
         const prDetails = await this.githubService.getPRDetails(prNumber);
@@ -980,7 +1004,7 @@ class ReviewService {
                 diff: file.diff,
             };
         }));
-        // Get repository context (package.json, readme, etc)
+        // Get repository context (now using configured files)
         const contextFiles = await this.getRepositoryContext();
         // Perform AI review
         const review = await this.aiProvider.review({
@@ -996,7 +1020,7 @@ class ReviewService {
             context: {
                 repository: (_a = process.env.GITHUB_REPOSITORY) !== null && _a !== void 0 ? _a : '',
                 owner: (_b = process.env.GITHUB_REPOSITORY_OWNER) !== null && _b !== void 0 ? _b : '',
-                projectContext: process.env.INPUT_PROJECT_CONTEXT,
+                projectContext: this.config.projectContext,
                 isUpdate,
             },
         });
@@ -1006,14 +1030,14 @@ class ReviewService {
         // Submit review
         await this.githubService.submitReview(prNumber, {
             ...review,
+            lineComments: this.config.maxComments > 0 ? (_d = review.lineComments) === null || _d === void 0 ? void 0 : _d.slice(0, this.config.maxComments) : review.lineComments,
             suggestedAction: this.normalizeReviewEvent(review.suggestedAction),
         });
         return review;
     }
     async getRepositoryContext() {
-        const contextFiles = ['package.json', 'README.md']; // TODO: This should be configurable
         const results = [];
-        for (const file of contextFiles) {
+        for (const file of (this.config.contextFiles || [])) {
             try {
                 const content = await this.githubService.getFileContent(file);
                 if (content) {
@@ -1027,7 +1051,7 @@ class ReviewService {
         return results;
     }
     normalizeReviewEvent(action) {
-        if (!action) {
+        if (!action || !this.config.approveReviews) {
             return 'COMMENT';
         }
         const eventMap = {
