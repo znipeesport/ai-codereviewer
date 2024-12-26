@@ -13,7 +13,7 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async review(request: ReviewRequest): Promise<ReviewResponse> {
-    core.debug(`Sending request to OpenAI with prompt structure: ${JSON.stringify(request, null, 2)}`);
+    core.info(`Sending request to OpenAI with prompt structure: ${JSON.stringify(request, null, 2)}`);
 
     const response = await this.client.chat.completions.create({
       model: this.config.model,
