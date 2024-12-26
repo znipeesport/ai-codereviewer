@@ -17,7 +17,7 @@ export class AnthropicProvider implements AIProvider {
 
   async review(request: ReviewRequest): Promise<ReviewResponse> {
     const prompt = this.buildPrompt(request);
-    core.info(`Sending request to Anthropic with prompt structure: ${JSON.stringify(request, null, 2)}`);
+    core.debug(`Sending request to Anthropic with prompt structure: ${JSON.stringify(request, null, 2)}`);
 
     const response = await this.client.messages.create({
       model: this.config.model,
@@ -36,7 +36,7 @@ export class AnthropicProvider implements AIProvider {
       temperature: this.config.temperature ?? 0.3,
     });
 
-    core.info(`Raw Anthropic response: ${JSON.stringify((response.content[0] as TextBlock).text, null, 2)}`);
+    core.debug(`Raw Anthropic response: ${JSON.stringify((response.content[0] as TextBlock).text, null, 2)}`);
 
     const parsedResponse = this.parseResponse(response);
     core.info(`Parsed response: ${JSON.stringify(parsedResponse, null, 2)}`);

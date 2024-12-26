@@ -74,4 +74,73 @@ export class DiffService {
       })
       .join('\n');
   }
+
+  getModifiedLines(diff: string): Array<{ start: number; end: number }> {
+    const files = parseDiff(diff);
+    const modifiedLines: Array<{ start: number; end: number }> = [];
+
+    for (const file of files) {
+      for (const chunk of file.chunks) {
+        let currentLine = chunk.newStart;
+        let currentBlock: { start: number; end: number } | null = null;
+
+        for (const change of chunk.changes) {
+          if (change.type === 'add' || change.type === 'normal') {
+            if (change.type === 'add') {
+              if (!currentBlock) {
+                currentBlock = { start: currentLine, end: currentLine + 1 };
+                modifiedLines.push(currentBlock);
+              } else {
+                currentBlock.end = currentLine + 1;
+              }
+            } else if (change.type === 'normal' && currentBlock) {
+              currentBlock = null;
+            }
+            currentLine++;
+          }
+        }
+      }
+    }
+
+    return modifiedLines;
+  }
+
+  extractRelevantContext(fullContent: string, diff: string, contextLines: number = 10): string {
+    const modifiedLines = this.getModifiedLines(diff);
+    const lines = fullContent.split('\n');
+    const relevantSections: Array<{ start: number; end: number }> = [];
+
+    // Merge nearby sections
+    for (const block of modifiedLines) {
+      const start = Math.max(0, block.start - contextLines);
+      const end = Math.min(lines.length, block.end + contextLines);
+
+      if (relevantSections.length > 0 && start <= relevantSections[relevantSections.length - 1].end) {
+        relevantSections[relevantSections.length - 1].end = end;
+      } else {
+        relevantSections.push({ start, end });
+      }
+    }
+
+    return this.formatRelevantSections(lines, relevantSections);
+  }
+
+  private formatRelevantSections(lines: string[], sections: Array<{ start: number; end: number }>): string {
+    const result: string[] = [];
+    let lastEnd = 0;
+
+    for (const section of sections) {
+      if (section.start > lastEnd) {
+        result.push('// ... skipped unchanged code ...');
+      }
+      result.push(...lines.slice(section.start, section.end));
+      lastEnd = section.end;
+    }
+
+    if (lastEnd < lines.length) {
+      result.push('// ... skipped unchanged code ...');
+    }
+
+    return result.join('\n');
+  }
 }

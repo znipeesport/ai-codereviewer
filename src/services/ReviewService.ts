@@ -19,17 +19,29 @@ export class ReviewService {
     core.info(`PR title: ${prDetails.title}`);
 
     // Get modified files from diff
-    const modifiedFiles = await this.diffService.getRelevantFiles(prDetails);
+    const lastReviewedCommit = await this.githubService.getLastReviewedCommit(prNumber);
+    const isUpdate = !!lastReviewedCommit;
+
+    const modifiedFiles = await this.diffService.getRelevantFiles(prDetails, lastReviewedCommit);
     core.info(`Modified files length: ${modifiedFiles.length}`);
 
     // Get full content for each modified file
     const filesWithContent = await Promise.all(
-      modifiedFiles.map(async (file) => ({
-        path: file.path,
-        content: await this.githubService.getFileContent(file.path, prDetails.head),
-        originalContent: await this.githubService.getFileContent(file.path, prDetails.base),
-        diff: file.diff,
-      }))
+      modifiedFiles.map(async (file) => {
+        const fullContent = await this.githubService.getFileContent(file.path, prDetails.head);
+        return {
+          path: file.path,
+          content: isUpdate ? this.diffService.extractRelevantContext(fullContent, file.diff) : fullContent,
+          originalContent: await this.githubService.getFileContent(file.path, prDetails.base),
+          diff: file.diff,
+          // Add metadata about the changes
+          changeContext: isUpdate ? {
+            previouslyReviewed: true,
+            modifiedLines: this.diffService.getModifiedLines(file.diff),
+            surroundingContext: true  // Flag indicating we're including some context
+          } : undefined
+        };
+      })
     );
 
     // Get repository context (package.json, readme, etc)

@@ -42,14 +42,14 @@ index abc..def 100644
   });
 
   it('should filter out excluded files', async () => {
-    const service = new DiffService();
+    const service = new DiffService('mock-github-token');
     const files = await service.getRelevantFiles(mockPRDetails);
     expect(files.length).toBeGreaterThan(0);
     expect(files.every(f => !f.path.endsWith('.md'))).toBeTruthy();
   });
 
   it('should format diff correctly', async () => {
-    const service = new DiffService();
+    const service = new DiffService('mock-github-token');
     const files = await service.getRelevantFiles(mockPRDetails);
     expect(files[0].diff).toContain('@@ ');
     expect(files[0].diff).toContain('+console.log("new line")');

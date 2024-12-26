@@ -21,7 +21,7 @@ export class GeminiProvider implements AIProvider {
 
   async review(request: ReviewRequest): Promise<ReviewResponse> {
     const prompt = this.buildPrompt(request);
-    core.info(`Sending request to Gemini with prompt structure: ${JSON.stringify(request, null, 2)}`);
+    core.debug(`Sending request to Gemini with prompt structure: ${JSON.stringify(request, null, 2)}`);
 
     const result = await this.model.generateContent({
       systemInstruction: baseCodeReviewPrompt,

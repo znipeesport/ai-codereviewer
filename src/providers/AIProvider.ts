@@ -16,6 +16,16 @@ export interface ReviewRequest {
     path: string;
     content: string;
   }>;
+  previousReviews?: Array<{
+    commit: string;
+    summary: string;
+    lineComments: Array<{
+      path: string;
+      line: number;
+      comment: string;
+      resolved?: boolean;
+    }>;
+  }>;
   pullRequest: {
     title: string;
     description: string;
