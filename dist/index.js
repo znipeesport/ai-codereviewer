@@ -630,23 +630,26 @@ class DiffService {
             .map(p => p.trim());
     }
     async getRelevantFiles(prDetails, lastReviewedCommit) {
-        const baseUrl = `https://api.github.com/repos/${prDetails.owner}/${prDetails.repo}/pulls/${prDetails.number}`;
+        const baseUrl = `https://api.github.com/repos/${prDetails.owner}/${prDetails.repo}`;
         const diffUrl = lastReviewedCommit ?
-            `${baseUrl}/compare/${lastReviewedCommit}...${prDetails.head}.diff` :
-            `${baseUrl}.diff`;
+            `${baseUrl}/compare/${lastReviewedCommit}...${prDetails.head}` :
+            `${baseUrl}/pulls/${prDetails.number}`;
         const response = await fetch(diffUrl, {
             headers: {
                 'Authorization': `Bearer ${this.githubToken}`,
-                'Accept': 'application/vnd.github.v3.diff'
+                'Accept': 'application/vnd.github.v3.diff',
+                'X-GitHub-Api-Version': '2022-11-28'
             }
         });
         if (!response.ok) {
-            core.error(`Failed to fetch diff: ${await response.text()}`);
+            const errorText = await response.text();
+            core.error(`Failed to fetch diff from ${diffUrl}: ${errorText}`);
             throw new Error(`Failed to fetch diff: ${response.statusText}`);
         }
         const diffText = await response.text();
-        core.info(`Diff text length: ${diffText.length}`);
+        core.debug(`Full diff text length: ${diffText.length}`);
         const files = (0, parse_diff_1.default)(diffText);
+        core.info(`Found ${files.length} files in diff`);
         return this.filterRelevantFiles(files);
     }
     filterRelevantFiles(files) {
