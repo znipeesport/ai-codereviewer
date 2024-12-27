@@ -833,21 +833,21 @@ class GitHubService {
         // Convert line comments to GitHub review comments format
         const allComments = await Promise.all(lineComments.map(async (comment) => {
             try {
-                // Get the position in the diff for this line
-                const position = await this.getDiffPosition(prNumber, comment.path, comment.line);
                 return {
                     path: comment.path,
-                    position, // Use diff position instead of line number
+                    side: 'RIGHT', // For new file version
+                    line: comment.line, // The actual line number
                     body: comment.comment
                 };
             }
             catch (error) {
-                core.warning(`Failed to get diff position for ${comment.path}: ${error}`);
+                core.warning(`Skipping comment for ${comment.path}:${comment.line} - ${error}`);
                 return null;
             }
         }));
         const comments = allComments.filter(comment => comment !== null);
-        core.info(`Submitting review with comments: ${JSON.stringify(comments, null, 2)}`);
+        core.info(`Submitting review with ${comments.length} comments`);
+        core.debug(`Review comments: ${JSON.stringify(comments, null, 2)}`);
         await this.octokit.pulls.createReview({
             owner: this.owner,
             repo: this.repo,
@@ -857,6 +857,14 @@ class GitHubService {
             event: suggestedAction.toUpperCase()
         });
     }
+    /**
+     * This is a hack to get the position of a line in the diff.
+     * It's not perfect, but it's better than nothing.
+     * It's based on the patch file, which is not always available.
+     * It's also not always accurate, but it's better than nothing.
+     *
+     * @deprecated
+     */
     async getDiffPosition(prNumber, filePath, line) {
         const { data: files } = await this.octokit.pulls.listFiles({
             owner: this.owner,
@@ -867,34 +875,41 @@ class GitHubService {
         if (!file) {
             throw new Error(`File ${filePath} not found in PR diff`);
         }
-        core.debug(`Processing diff for ${filePath}:`);
-        core.debug(file.patch || '');
-        // Parse the patch and find the position
         const patch = file.patch || '';
         let position = 0;
-        let currentLine = 0;
-        let inHunk = false;
+        let oldLine = 0;
+        let newLine = 0;
         for (const patchLine of patch.split('\n')) {
             if (patchLine.startsWith('@@')) {
-                // Parse hunk header
-                const match = patchLine.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+                const match = patchLine.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
                 if (match) {
-                    currentLine = parseInt(match[1], 10) - 1;
-                    inHunk = true;
+                    oldLine = parseInt(match[1], 10) - 1;
+                    newLine = parseInt(match[2], 10) - 1;
+                }
+                continue;
+            }
+            position++;
+            if (patchLine.startsWith('-')) {
+                oldLine++;
+                if (oldLine === line) {
+                    return position;
                 }
             }
-            else if (inHunk) {
-                position++;
-                if (patchLine.startsWith('+') || !patchLine.startsWith('-')) {
-                    currentLine++;
-                    core.debug(`Line ${currentLine} at position ${position}`);
-                    if (currentLine === line) {
-                        return position;
-                    }
+            else if (patchLine.startsWith('+')) {
+                newLine++;
+                if (newLine === line) {
+                    return position;
+                }
+            }
+            else {
+                oldLine++;
+                newLine++;
+                if (newLine === line || oldLine === line) {
+                    return position;
                 }
             }
         }
-        core.error(`Failed to find line ${line} in diff. Last line processed: ${currentLine}`);
+        core.error(`Failed to find line ${line} in diff. Last old line: ${oldLine}, last new line: ${newLine}`);
         throw new Error(`Line ${line} not found in diff for ${filePath}`);
     }
     async getLastReviewedCommit(prNumber) {
