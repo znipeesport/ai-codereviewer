@@ -57,7 +57,7 @@ jobs:
           MAX_COMMENTS: 10 # 0 to disable
           PROJECT_CONTEXT: "This is a Node.js TypeScript project"
           CONTEXT_FILES: "package.json,README.md"
-          EXCLUDE_PATTERNS: "**/*.md,**/*.json"
+          EXCLUDE_PATTERNS: "**/*.lock,**/*.json,**/*.md"
 ```
 
 ## Configuration
@@ -72,7 +72,7 @@ jobs:
 | `MAX_COMMENTS` | Maximum number of review comments | `0` |
 | `PROJECT_CONTEXT` | Project context for better reviews | `""` |
 | `CONTEXT_FILES` | Files to include in review (comma-separated) | `"package.json,README.md"` |
-| `EXCLUDE_PATTERNS` | Files to exclude (glob patterns, comma-separated) | `""` |
+| `EXCLUDE_PATTERNS` | Files to exclude (glob patterns, comma-separated) | `"**/*.lock,**/*.json,**/*.md"` |
 
 ### Supported Models
 

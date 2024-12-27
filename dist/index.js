@@ -185,25 +185,38 @@ Note:
 - When in doubt, prefer "Comment" over "Request Changes"
 ------
 
-For the "comments" field, provide a list of comments. Each comment should have the following fields:
-- path: The path to the file that the comment is about
-- line: The line number in the file that the comment is about
-- comment: The comment text
-Other rules for "comments" field:
-- Comments should ONLY be added to lines or blocks of code that have issues.
-- ONLY use line numbers that appear in the "diff" property of each file
-- Each diff line starts with a prefix:
-  * "normal" for unchanged lines
-  * "del" for removed lines
-  * "add" for added lines
-- Extract the line number that appears after the prefix
-- DO NOT use line number 0 or line numbers not present in the diff
+For the "comments" field:
+- ONLY add comments for actual issues that need to be addressed
+- DO NOT add comments for:
+  * Compliments or positive feedback
+  * Style preferences
+  * Minor suggestions
+  * Obvious changes
+  * General observations
+- Each comment must be:
+  * Actionable (something specific that needs to change)
+  * Important enough to discuss
+  * Related to code quality, performance, or correctness
+- Each comment should have the following fields:
+  * path: The path to the file that the comment is about
+  * line: The line number in the file that the comment is about
+  * comment: The comment text
+- Other rules for "comments" field:
+  * ONLY use line numbers that appear in the "diff" property of each file
+  * Each diff line starts with a prefix:
+    * "normal" for unchanged lines
+    * "del" for removed lines
+    * "add" for added lines
+  * Extract the line number that appears after the prefix
+  * DO NOT use line number 0 or line numbers not present in the diff
 
+------
 For the "suggestedAction" field, provide a single word that indicates the action to be taken. Options are:
 - "approve"
 - "request_changes"
 - "comment"
 
+------
 For the "confidence" field, provide a number between 0 and 100 that indicates the confidence in the verdict.
 `;
 exports.updateReviewPrompt = `
@@ -663,7 +676,8 @@ class DiffService {
         this.githubToken = githubToken;
         this.excludePatterns = excludePatterns
             .split(',')
-            .map(p => p.trim());
+            .map(p => p.trim())
+            .filter(p => p);
     }
     async getRelevantFiles(prDetails, lastReviewedCommit) {
         const baseUrl = `https://api.github.com/repos/${prDetails.owner}/${prDetails.repo}`;
@@ -689,13 +703,18 @@ class DiffService {
         return this.filterRelevantFiles(files);
     }
     filterRelevantFiles(files) {
+        core.debug(`Excluding patterns: ${this.excludePatterns.join(', ')}`);
         return files
             .filter(file => {
-            const shouldInclude = !this.excludePatterns.some(pattern => { var _a; return (0, minimatch_1.minimatch)((_a = file.to) !== null && _a !== void 0 ? _a : '', pattern); });
-            if (!shouldInclude) {
-                core.debug(`Excluding file: ${file.to}`);
+            var _a;
+            const filePath = (_a = file.to) !== null && _a !== void 0 ? _a : '';
+            const shouldExclude = this.excludePatterns.some(pattern => (0, minimatch_1.minimatch)(filePath, pattern, { matchBase: true, dot: true }));
+            core.debug(`File: ${filePath}, shouldExclude: ${shouldExclude}`);
+            if (shouldExclude) {
+                core.debug(`Excluding diff file based on pattern: ${filePath}`);
+                return false;
             }
-            return shouldInclude;
+            return true;
         })
             .map(file => {
             var _a;
