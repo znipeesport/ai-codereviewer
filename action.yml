@@ -15,6 +15,10 @@ inputs:
   AI_API_KEY:
     description: "API key for the chosen AI provider"
     required: true
+  AI_TEMPERATURE:
+    description: "Temperature for AI model (higher values = more creativity and variance)"
+    required: false
+    default: "0"
   APPROVE_REVIEWS:
     description: "Whether to approve/reject PRs automatically"
     required: false

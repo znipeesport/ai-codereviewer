@@ -50,6 +50,7 @@ jobs:
           AI_PROVIDER: "openai" # or "anthropic" or "google"
           AI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           AI_MODEL: "gpt-4o-mini"
+          AI_TEMPERATURE: 0.3 # 0 to 1 - higher values = more creativity and variance
 
           # Optional configurations
           APPROVE_REVIEWS: true
@@ -66,6 +67,7 @@ jobs:
 | `AI_PROVIDER` | AI provider to use (`openai`, `anthropic`, `google`) | `openai` |
 | `AI_API_KEY` | API key for chosen provider | Required |
 | `AI_MODEL` | Model to use (see supported models below) | Provider's default |
+| `AI_TEMPERATURE` | Temperature for AI model | `0` |
 | `APPROVE_REVIEWS` | Whether to approve PRs automatically | `true` |
 | `MAX_COMMENTS` | Maximum number of review comments | `0` |
 | `PROJECT_CONTEXT` | Project context for better reviews | `""` |
