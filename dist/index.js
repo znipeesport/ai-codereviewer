@@ -56,6 +56,7 @@ async function main() {
         const model = core.getInput('AI_MODEL');
         const apiKey = core.getInput('AI_API_KEY');
         const githubToken = core.getInput('GITHUB_TOKEN');
+        const temperature = parseFloat(core.getInput('AI_TEMPERATURE') || '0');
         // Get new configuration inputs
         const approveReviews = core.getBooleanInput('APPROVE_REVIEWS');
         const maxComments = parseInt(core.getInput('MAX_COMMENTS') || '0', 10);
@@ -67,7 +68,7 @@ async function main() {
         await aiProvider.initialize({
             apiKey,
             model,
-            temperature: 0.3,
+            temperature,
         });
         // Initialize services
         const githubService = new GitHubService_1.GitHubService(githubToken);
