@@ -14,6 +14,12 @@ Follow this JSON format:
 ${outputFormat}
 
 ------
+Understanding the diff:
+- Lines starting with "-" (del) show code that was REMOVED
+- Lines starting with "+" (add) show code that was ADDED
+- Lines without prefix (normal) show unchanged context
+
+------
 For the "summary" field, use Markdown formatting and follow these guidelines:
 1. 🎯 Core Changes
    - What is the main purpose/goal of this PR?
@@ -54,6 +60,7 @@ Note:
 ------
 
 For the "comments" field:
+
 - ONLY add comments for actual issues that need to be addressed
 - DO NOT add comments for:
   * Compliments or positive feedback
@@ -61,6 +68,7 @@ For the "comments" field:
   * Minor suggestions
   * Obvious changes
   * General observations
+  * Ensuring/Confirming intended behavior
 - Each comment must be:
   * Actionable (something specific that needs to change)
   * Important enough to discuss
@@ -71,12 +79,17 @@ For the "comments" field:
   * comment: The comment text
 - Other rules for "comments" field:
   * ONLY use line numbers that appear in the "diff" property of each file
-  * Each diff line starts with a prefix:
-    * "normal" for unchanged lines
-    * "del" for removed lines
-    * "add" for added lines
   * Extract the line number that appears after the prefix
   * DO NOT use line number 0 or line numbers not present in the diff
+  * DO NOT comment on removed lines unless their removal creates a problem:
+    ** Focus your review on:
+      1. New code (lines with "+")
+      2. The impact of changes on existing code
+      3. Potential issues in the new implementation
+    ** For example:
+      - BAD: "This line was removed" (unless removal causes issues)
+      - GOOD: "The new implementation might cause X issue"
+      - GOOD: "Consider adding Y to the new code"
 
 ------
 For the "suggestedAction" field, provide a single word that indicates the action to be taken. Options are:

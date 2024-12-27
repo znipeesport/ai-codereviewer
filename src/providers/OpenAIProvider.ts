@@ -19,7 +19,7 @@ export class OpenAIProvider implements AIProvider {
       model: this.config.model,
       messages: [
         {
-          role: 'system',
+          role: this.getSystemPromptRole(),
           content: this.buildSystemPrompt(request),
         },
         {
@@ -27,8 +27,8 @@ export class OpenAIProvider implements AIProvider {
           content: this.buildPullRequestPrompt(request),
         },
       ],
-      temperature: this.config.temperature ?? 0.3,
-      response_format: { type: 'json_object' },
+      temperature: this.getTemperature(),
+      response_format: this.isO1Mini() ? { type: 'text' } : { type: 'json_object' },
     });
 
     core.debug(`Raw OpenAI response: ${JSON.stringify(response.choices[0].message.content, null, 2)}`);
@@ -65,13 +65,33 @@ export class OpenAIProvider implements AIProvider {
   }
 
   private parseResponse(response: OpenAI.Chat.Completions.ChatCompletion): ReviewResponse {
+    let rawContent = response.choices[0].message.content ?? '{}';
+
+    if (rawContent.startsWith('```json')) {
+      rawContent = rawContent.slice(7, -3);
+    }
+
     // Implement response parsing
-    const content = JSON.parse(response.choices[0].message.content ?? '{}');
+    const content = JSON.parse(rawContent);
     return {
       summary: content.summary,
       lineComments: content.comments,
       suggestedAction: content.suggestedAction,
       confidence: content.confidence,
     };
+  }
+
+  private isO1Mini(): boolean {
+    return this.config.model.includes('o1-mini');
+  }
+
+  private getSystemPromptRole(): 'system' | 'user' {
+    // o1 doesn't support 'system' role
+    return this.isO1Mini() ? 'user' : 'system';
+  }
+
+  private getTemperature(): number {
+    // o1 only supports 1.0
+    return this.isO1Mini() ? 1 : this.config.temperature ?? 0.3;
   }
 }
