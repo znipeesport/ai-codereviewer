@@ -146,6 +146,12 @@ Follow this JSON format:
 ${exports.outputFormat}
 
 ------
+Understanding the diff:
+- Lines starting with "-" (del) show code that was REMOVED
+- Lines starting with "+" (add) show code that was ADDED
+- Lines without prefix (normal) show unchanged context
+
+------
 For the "summary" field, use Markdown formatting and follow these guidelines:
 1. 🎯 Core Changes
    - What is the main purpose/goal of this PR?
@@ -185,25 +191,45 @@ Note:
 - When in doubt, prefer "Comment" over "Request Changes"
 ------
 
-For the "comments" field, provide a list of comments. Each comment should have the following fields:
-- path: The path to the file that the comment is about
-- line: The line number in the file that the comment is about
-- comment: The comment text
-Other rules for "comments" field:
-- Comments should ONLY be added to lines or blocks of code that have issues.
-- ONLY use line numbers that appear in the "diff" property of each file
-- Each diff line starts with a prefix:
-  * "normal" for unchanged lines
-  * "del" for removed lines
-  * "add" for added lines
-- Extract the line number that appears after the prefix
-- DO NOT use line number 0 or line numbers not present in the diff
+For the "comments" field:
 
+- ONLY add comments for actual issues that need to be addressed
+- DO NOT add comments for:
+  * Compliments or positive feedback
+  * Style preferences
+  * Minor suggestions
+  * Obvious changes
+  * General observations
+  * Ensuring/Confirming intended behavior
+- Each comment must be:
+  * Actionable (something specific that needs to change)
+  * Important enough to discuss
+  * Related to code quality, performance, or correctness
+- Each comment should have the following fields:
+  * path: The path to the file that the comment is about
+  * line: The line number in the file that the comment is about
+  * comment: The comment text
+- Other rules for "comments" field:
+  * ONLY use line numbers that appear in the "diff" property of each file
+  * Extract the line number that appears after the prefix
+  * DO NOT use line number 0 or line numbers not present in the diff
+  * DO NOT comment on removed lines unless their removal creates a problem:
+    ** Focus your review on:
+      1. New code (lines with "+")
+      2. The impact of changes on existing code
+      3. Potential issues in the new implementation
+    ** For example:
+      - BAD: "This line was removed" (unless removal causes issues)
+      - GOOD: "The new implementation might cause X issue"
+      - GOOD: "Consider adding Y to the new code"
+
+------
 For the "suggestedAction" field, provide a single word that indicates the action to be taken. Options are:
 - "approve"
 - "request_changes"
 - "comment"
 
+------
 For the "confidence" field, provide a number between 0 and 100 that indicates the confidence in the verdict.
 `;
 exports.updateReviewPrompt = `
@@ -549,13 +575,12 @@ class OpenAIProvider {
         this.client = new openai_1.default({ apiKey: config.apiKey });
     }
     async review(request) {
-        var _a;
         core.info(`Sending request to OpenAI with prompt structure: ${JSON.stringify(request, null, 2)}`);
         const response = await this.client.chat.completions.create({
             model: this.config.model,
             messages: [
                 {
-                    role: 'system',
+                    role: this.getSystemPromptRole(),
                     content: this.buildSystemPrompt(request),
                 },
                 {
@@ -563,8 +588,8 @@ class OpenAIProvider {
                     content: this.buildPullRequestPrompt(request),
                 },
             ],
-            temperature: (_a = this.config.temperature) !== null && _a !== void 0 ? _a : 0.3,
-            response_format: { type: 'json_object' },
+            temperature: this.getTemperature(),
+            response_format: this.isO1Mini() ? { type: 'text' } : { type: 'json_object' },
         });
         core.debug(`Raw OpenAI response: ${JSON.stringify(response.choices[0].message.content, null, 2)}`);
         const parsedResponse = this.parseResponse(response);
@@ -597,14 +622,30 @@ class OpenAIProvider {
     }
     parseResponse(response) {
         var _a;
+        let rawContent = (_a = response.choices[0].message.content) !== null && _a !== void 0 ? _a : '{}';
+        if (rawContent.startsWith('```json')) {
+            rawContent = rawContent.slice(7, -3);
+        }
         // Implement response parsing
-        const content = JSON.parse((_a = response.choices[0].message.content) !== null && _a !== void 0 ? _a : '{}');
+        const content = JSON.parse(rawContent);
         return {
             summary: content.summary,
             lineComments: content.comments,
             suggestedAction: content.suggestedAction,
             confidence: content.confidence,
         };
+    }
+    isO1Mini() {
+        return this.config.model.includes('o1-mini');
+    }
+    getSystemPromptRole() {
+        // o1 doesn't support 'system' role
+        return this.isO1Mini() ? 'user' : 'system';
+    }
+    getTemperature() {
+        var _a;
+        // o1 only supports 1.0
+        return this.isO1Mini() ? 1 : (_a = this.config.temperature) !== null && _a !== void 0 ? _a : 0.3;
     }
 }
 exports.OpenAIProvider = OpenAIProvider;
@@ -663,7 +704,8 @@ class DiffService {
         this.githubToken = githubToken;
         this.excludePatterns = excludePatterns
             .split(',')
-            .map(p => p.trim());
+            .map(p => p.trim())
+            .filter(p => p);
     }
     async getRelevantFiles(prDetails, lastReviewedCommit) {
         const baseUrl = `https://api.github.com/repos/${prDetails.owner}/${prDetails.repo}`;
@@ -689,13 +731,18 @@ class DiffService {
         return this.filterRelevantFiles(files);
     }
     filterRelevantFiles(files) {
+        core.debug(`Excluding patterns: ${this.excludePatterns.join(', ')}`);
         return files
             .filter(file => {
-            const shouldInclude = !this.excludePatterns.some(pattern => { var _a; return (0, minimatch_1.minimatch)((_a = file.to) !== null && _a !== void 0 ? _a : '', pattern); });
-            if (!shouldInclude) {
-                core.debug(`Excluding file: ${file.to}`);
+            var _a;
+            const filePath = (_a = file.to) !== null && _a !== void 0 ? _a : '';
+            const shouldExclude = this.excludePatterns.some(pattern => (0, minimatch_1.minimatch)(filePath, pattern, { matchBase: true, dot: true }));
+            core.debug(`File: ${filePath}, shouldExclude: ${shouldExclude}`);
+            if (shouldExclude) {
+                core.debug(`Excluding diff file based on pattern: ${filePath}`);
+                return false;
             }
-            return shouldInclude;
+            return true;
         })
             .map(file => {
             var _a;
@@ -814,21 +861,21 @@ class GitHubService {
         // Convert line comments to GitHub review comments format
         const allComments = await Promise.all(lineComments.map(async (comment) => {
             try {
-                // Get the position in the diff for this line
-                const position = await this.getDiffPosition(prNumber, comment.path, comment.line);
                 return {
                     path: comment.path,
-                    position, // Use diff position instead of line number
+                    side: 'RIGHT', // For new file version
+                    line: comment.line, // The actual line number
                     body: comment.comment
                 };
             }
             catch (error) {
-                core.warning(`Failed to get diff position for ${comment.path}: ${error}`);
+                core.warning(`Skipping comment for ${comment.path}:${comment.line} - ${error}`);
                 return null;
             }
         }));
         const comments = allComments.filter(comment => comment !== null);
-        core.info(`Submitting review with comments: ${JSON.stringify(comments, null, 2)}`);
+        core.info(`Submitting review with ${comments.length} comments`);
+        core.debug(`Review comments: ${JSON.stringify(comments, null, 2)}`);
         await this.octokit.pulls.createReview({
             owner: this.owner,
             repo: this.repo,
@@ -838,6 +885,14 @@ class GitHubService {
             event: suggestedAction.toUpperCase()
         });
     }
+    /**
+     * This is a hack to get the position of a line in the diff.
+     * It's not perfect, but it's better than nothing.
+     * It's based on the patch file, which is not always available.
+     * It's also not always accurate, but it's better than nothing.
+     *
+     * @deprecated
+     */
     async getDiffPosition(prNumber, filePath, line) {
         const { data: files } = await this.octokit.pulls.listFiles({
             owner: this.owner,
@@ -848,34 +903,41 @@ class GitHubService {
         if (!file) {
             throw new Error(`File ${filePath} not found in PR diff`);
         }
-        core.debug(`Processing diff for ${filePath}:`);
-        core.debug(file.patch || '');
-        // Parse the patch and find the position
         const patch = file.patch || '';
         let position = 0;
-        let currentLine = 0;
-        let inHunk = false;
+        let oldLine = 0;
+        let newLine = 0;
         for (const patchLine of patch.split('\n')) {
             if (patchLine.startsWith('@@')) {
-                // Parse hunk header
-                const match = patchLine.match(/@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+                const match = patchLine.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
                 if (match) {
-                    currentLine = parseInt(match[1], 10) - 1;
-                    inHunk = true;
+                    oldLine = parseInt(match[1], 10) - 1;
+                    newLine = parseInt(match[2], 10) - 1;
+                }
+                continue;
+            }
+            position++;
+            if (patchLine.startsWith('-')) {
+                oldLine++;
+                if (oldLine === line) {
+                    return position;
                 }
             }
-            else if (inHunk) {
-                position++;
-                if (patchLine.startsWith('+') || !patchLine.startsWith('-')) {
-                    currentLine++;
-                    core.debug(`Line ${currentLine} at position ${position}`);
-                    if (currentLine === line) {
-                        return position;
-                    }
+            else if (patchLine.startsWith('+')) {
+                newLine++;
+                if (newLine === line) {
+                    return position;
+                }
+            }
+            else {
+                oldLine++;
+                newLine++;
+                if (newLine === line || oldLine === line) {
+                    return position;
                 }
             }
         }
-        core.error(`Failed to find line ${line} in diff. Last line processed: ${currentLine}`);
+        core.error(`Failed to find line ${line} in diff. Last old line: ${oldLine}, last new line: ${newLine}`);
         throw new Error(`Line ${line} not found in diff for ${filePath}`);
     }
     async getLastReviewedCommit(prNumber) {

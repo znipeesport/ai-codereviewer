@@ -11,7 +11,8 @@ export class DiffService {
     this.githubToken = githubToken;
     this.excludePatterns = excludePatterns
       .split(',')
-      .map(p => p.trim());
+      .map(p => p.trim())
+      .filter(p => p);
   }
 
   async getRelevantFiles(
@@ -47,15 +48,23 @@ export class DiffService {
   }
 
   private filterRelevantFiles(files: File[]): Array<{ path: string; diff: string }> {
+    core.debug(`Excluding patterns: ${this.excludePatterns.join(', ')}`);
+
     return files
       .filter(file => {
-        const shouldInclude = !this.excludePatterns.some(pattern => 
-          minimatch(file.to ?? '', pattern)
+        const filePath = file.to ?? '';
+        const shouldExclude = this.excludePatterns.some(pattern => 
+          minimatch(filePath, pattern, { matchBase: true, dot: true })
         );
-        if (!shouldInclude) {
-          core.debug(`Excluding file: ${file.to}`);
+
+        core.debug(`File: ${filePath}, shouldExclude: ${shouldExclude}`);
+
+        if (shouldExclude) {
+          core.debug(`Excluding diff file based on pattern: ${filePath}`);
+          return false;
         }
-        return shouldInclude;
+
+        return true;
       })
       .map(file => ({
         path: file.to ?? '',
