@@ -20,22 +20,37 @@ For the "summary" field, use Markdown formatting and follow these guidelines:
    - Only highlight the most impactful changes
 
 2. ⚠️ Concerns (if any)
-   - Security issues
-   - Performance impacts
-   - Logic flaws
-   - Breaking changes
+   - Security vulnerabilities
+   - Performance degradation
+   - Critical logic flaws
+   - Breaking API changes without migration path
 
 3. Verdict:
    Should be one of the following:
-   - Approve: Changes look good, no major issues
-   - Comment: Minor concerns or need clarification
-   - Request Changes: Serious issues that must be addressed
-   Also add a short explanation for the verdict.
+   - Approve: Changes look good and are safe to merge
+   - Comment: Changes need discussion or minor adjustments
+   - Request Changes: ONLY for serious issues such as:
+     * Security vulnerabilities
+     * Critical performance issues
+     * Broken core functionality
+     * Data integrity risks
+     * Production stability threats
+
+   Normal code improvements, refactoring suggestions, or breaking changes 
+   with clear migration paths should use "Comment" instead.
+
+Examples of when to use each verdict:
+- Approve: Clean refactoring, bug fixes, new features with tests
+- Comment: Breaking changes with migration path, performance suggestions, 
+          architectural discussions, missing tests/docs
+- Request Changes: Security holes, data loss risks, broken core features, 
+                  deployment blockers, critical performance issues
 
 Note:
-- Skip minor/stylistic issues
-- No need to explain every file
-- Missing tests/comments alone shouldn't block approval
+- Focus on substantial issues over style
+- Breaking changes alone aren't enough for "Request Changes"
+- Missing tests/docs should be "Comment" not "Request Changes"
+- When in doubt, prefer "Comment" over "Request Changes"
 ------
 
 For the "comments" field, provide a list of comments. Each comment should have the following fields:
