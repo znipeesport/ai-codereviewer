@@ -94,6 +94,7 @@ Examples of when to use each verdict:
     * Unclear naming or abstractions
     * Potential memory leaks
     * Non-critical TypeScript/lint issues
+    * Potential typos
 
 - Request Changes:
     * Security vulnerabilities (OWASP Top 10)

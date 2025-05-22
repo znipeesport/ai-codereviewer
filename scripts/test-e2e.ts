@@ -6,10 +6,10 @@ import { readFileSync } from 'fs';
 dotenv.config();
 
 // Load the PR ID
-const owner = 'demandio';
-const repo = process.argv[2] || 'simplycodes-extension';
-const prId = process.argv[3] || 982;
-const projectContext = process.argv[4] || 'This is a browser extension for SimplyCodes';
+const owner = process.argv[2];
+const repo = process.argv[3];
+const prId = process.argv[4];
+const projectContext = process.argv[4] || '';
 
 // Read the PR payload
 const prPayload = JSON.parse(

@@ -15,6 +15,25 @@ export class OpenAIProvider implements AIProvider {
   async review(request: ReviewRequest): Promise<ReviewResponse> {
     core.info(`Sending request to OpenAI with prompt structure: ${JSON.stringify(request, null, 2)}`);
 
+    /*
+    const payload = {
+      model: this.config.model,
+      messages: [
+        {
+          role: this.getSystemPromptRole(),
+          content: this.buildSystemPrompt(request),
+        },
+        {
+          role: 'user',
+          content: this.buildPullRequestPrompt(request),
+        },
+      ],
+      temperature: this.getTemperature(),
+      response_format: this.isO1Mini() ? { type: 'text' } : { type: 'json_object' },
+    }
+
+    core.info(`${JSON.stringify(payload, null, 2)}`)
+    */
     const response = await this.client.chat.completions.create({
       model: this.config.model,
       messages: [
@@ -35,8 +54,29 @@ export class OpenAIProvider implements AIProvider {
 
     const parsedResponse = this.parseResponse(response);
     core.info(`Parsed response: ${JSON.stringify(parsedResponse, null, 2)}`);
-
+    
     return parsedResponse;
+    /*
+    const mockResponse: ReviewResponse = {
+      summary: "This code looks solid overall, with minor issues.",
+      lineComments: [
+        {
+          path: "src/components/Button.tsx",
+          line: 42,
+          comment: "Consider renaming this variable for clarity."
+        },
+        {
+          path: "src/utils/formatter.ts",
+          line: 10,
+          comment: "Missing null check might cause a runtime error."
+        }
+      ],
+      suggestedAction: 'REQUEST_CHANGES',
+      confidence: 0.85
+    };
+  
+    return Promise.resolve(mockResponse);
+    */
   }
 
   private buildPullRequestPrompt(request: ReviewRequest): string {
