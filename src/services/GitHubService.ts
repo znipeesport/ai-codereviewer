@@ -89,8 +89,10 @@ export class GitHubService {
         pull_number: prNumber,
         body: summary,
         comments,
-        event: suggestedAction.toUpperCase() as 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT'
-      });
+        event: suggestedAction.toUpperCase() === 'APPROVE'
+          ? 'COMMENT'
+          : suggestedAction.toUpperCase() as 'REQUEST_CHANGES' | 'COMMENT'
+            });
     } catch (error) {
       core.warning(`Failed to submit review with comments: ${error}`);
       core.info('Retrying without line comments...');
@@ -102,8 +104,10 @@ export class GitHubService {
         pull_number: prNumber,
         body: `${summary}\n\n> Note: Some line comments were omitted due to technical limitations.`,
         comments: [],
-        event: suggestedAction.toUpperCase() as 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT'
-      });
+        event: suggestedAction.toUpperCase() === 'APPROVE'
+          ? 'COMMENT'
+          : suggestedAction.toUpperCase() as 'REQUEST_CHANGES' | 'COMMENT'
+            });
     }
   }
 
